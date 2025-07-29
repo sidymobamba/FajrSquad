@@ -70,16 +70,31 @@ namespace FajrSquad.API.Controllers
 
             return Ok(data);
         }
-
         [HttpGet("random")]
         public async Task<IActionResult> GetRandomMessage()
         {
-            var count = await _db.DailyMessages.CountAsync();
-            if (count == 0) return NotFound("Nessun messaggio disponibile.");
+            try
+            {
+                var count = await _db.DailyMessages.CountAsync();
+                if (count == 0)
+                    return NotFound("Nessun messaggio disponibile.");
 
-            var skip = new Random().Next(0, count);
-            var message = await _db.DailyMessages.Skip(skip).Take(1).FirstAsync();
-            return Ok(new { message.Message });
+                var skip = new Random().Next(0, count);
+                var message = await _db.DailyMessages.Skip(skip).Take(1).FirstOrDefaultAsync();
+
+                if (message == null)
+                    return StatusCode(500, "Errore: messaggio non trovato dopo lo skip.");
+
+                if (string.IsNullOrWhiteSpace(message.Message))
+                    return StatusCode(500, "Errore: il messaggio recuperato è nullo o vuoto.");
+
+                return Ok(new { message = message.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Errore interno: {ex.Message}");
+            }
         }
+
     }
 }
