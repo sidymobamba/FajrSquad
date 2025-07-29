@@ -9,12 +9,18 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
+var provider = builder.Configuration["DatabaseProvider"];
 
 builder.Services.AddDbContext<FajrDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    var cs = builder.Configuration.GetConnectionString("DefaultConnection");
 
-builder.Services.AddDbContext<FajrDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    if (provider == "postgres")
+        options.UseNpgsql(cs);
+    else
+        options.UseSqlServer(cs); // o MySQL se serve
+});
+
 
 
 // Add services to the container.
@@ -101,11 +107,11 @@ builder.Services.AddAuthentication(options =>
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
-    db.Database.Migrate(); // Applica automaticamente le migrazioni all'avvio
-}
+//using (var scope = app.Services.CreateScope())
+//{
+//    var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
+//    db.Database.Migrate(); // Applica automaticamente le migrazioni all'avvio
+//}
 
 
 // Configure the HTTP request pipeline.
