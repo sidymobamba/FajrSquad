@@ -7,6 +7,7 @@ COPY *.sln .
 COPY FajrSquad.API/*.csproj ./FajrSquad.API/
 COPY FajrSquad.Core/*.csproj ./FajrSquad.Core/
 COPY FajrSquad.Infrastructure/*.csproj ./FajrSquad.Infrastructure/
+COPY FajrSquad.Tests/*.csproj ./FajrSquad.Tests/
 
 # Ripristino dei pacchetti NuGet
 RUN dotnet restore
