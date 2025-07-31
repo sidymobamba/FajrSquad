@@ -47,6 +47,63 @@ namespace FajrSquad.API.Controllers
             return Ok(new { token, user.Id, user.Name, user.Email, user.City });
         }
 
+        [HttpPost("register-with-otp")]
+        public async Task<IActionResult> RegisterWithOtp(RegisterWithOtpRequest request, [FromServices] JwtService jwt)
+        {
+            // Verifica OTP
+            var otpRecord = await _db.OtpCodes
+                .FirstOrDefaultAsync(o => o.Phone == request.Phone && o.Code == request.Otp && !o.IsUsed);
+
+            if (otpRecord == null || otpRecord.ExpiresAt < DateTime.UtcNow)
+                return BadRequest("OTP non valido o scaduto.");
+
+            var exists = await _db.Users.AnyAsync(u => u.Phone == request.Phone);
+            if (exists)
+                return BadRequest("Telefono già registrato.");
+
+            // Marca OTP come usato
+            otpRecord.IsUsed = true;
+
+            var user = new User
+            {
+                Name = request.Name,
+                Email = request.Email,
+                Phone = request.Phone,
+                City = request.City,
+                MotivatingBrother = request.MotivatingBrother,
+                PasswordHash = "", // Non serve password con OTP
+                Role = "User"
+            };
+
+            _db.Users.Add(user);
+            await _db.SaveChangesAsync();
+
+            var token = jwt.GenerateToken(user);
+            return Ok(new { token, user.Id, user.Name, user.Email, user.City });
+        }
+
+        [HttpPost("login-with-otp")]
+        public async Task<IActionResult> LoginWithOtp(LoginWithOtpRequest request, [FromServices] JwtService jwt)
+        {
+            // Verifica OTP
+            var otpRecord = await _db.OtpCodes
+                .FirstOrDefaultAsync(o => o.Phone == request.Phone && o.Code == request.Otp && !o.IsUsed);
+
+            if (otpRecord == null || otpRecord.ExpiresAt < DateTime.UtcNow)
+                return BadRequest("OTP non valido o scaduto.");
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Phone == request.Phone);
+            if (user == null)
+                return Unauthorized("Utente non trovato.");
+
+            // Marca OTP come usato
+            otpRecord.IsUsed = true;
+            await _db.SaveChangesAsync();
+
+            var token = jwt.GenerateToken(user);
+            return Ok(new { token, user.Id, user.Name, user.Email, user.City });
+        }
+
         [HttpGet("users")]
         public async Task<IActionResult> GetUsers()
         {

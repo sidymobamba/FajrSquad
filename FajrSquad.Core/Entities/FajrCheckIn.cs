@@ -7,14 +7,14 @@ using FajrSquad.Core.Enums;
 
 namespace FajrSquad.Core.Entities
 {
-    public class FajrCheckIn
+    public class FajrCheckIn : BaseEntity 
     {
-        public Guid Id { get; set; }
         public Guid UserId { get; set; }
         public User User { get; set; } = default!;
-
-        public DateTime Date { get; set; } // solo data, no ora
+        public DateTime Date { get; set; }
         public CheckInStatus Status { get; set; }
+        public string? Notes { get; set; } 
     }
+
 
 }

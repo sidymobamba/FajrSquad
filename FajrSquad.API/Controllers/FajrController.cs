@@ -3,6 +3,7 @@ using FajrSquad.Core.DTOs;
 using FajrSquad.Core.Entities;
 using FajrSquad.Core.Enums;
 using FajrSquad.Infrastructure.Data;
+using FajrSquad.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,192 +15,289 @@ namespace FajrSquad.API.Controllers
     public class FajrController : ControllerBase
     {
         private readonly FajrDbContext _db;
+        private readonly IFajrService _fajrService;
+        private readonly ILogger<FajrController> _logger;
 
-        public FajrController(FajrDbContext db)
+        public FajrController(FajrDbContext db, IFajrService fajrService, ILogger<FajrController> logger)
         {
             _db = db;
+            _fajrService = fajrService;
+            _logger = logger;
         }
 
         [Authorize]
         [HttpPost("checkin")]
         public async Task<IActionResult> CheckIn(CheckInRequest request)
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var today = DateTime.UtcNow.Date;
-
-            if (!Enum.IsDefined(typeof(CheckInStatus), request.Status) || request.Status == CheckInStatus.None)
-                return BadRequest("Stato di check-in non valido.");
-
-            var already = await _db.FajrCheckIns
-                .FirstOrDefaultAsync(x => x.UserId == userId && x.Date == today);
-
-            if (already != null)
-                return BadRequest("Hai già fatto check-in oggi.");
-
-            var checkin = new FajrCheckIn
+            try
             {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                Date = today,
-                Status = request.Status
-            };
+                if (!TryGetUserId(out var userId))
+                    return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
-            _db.FajrCheckIns.Add(checkin);
-            await _db.SaveChangesAsync();
+                var result = await _fajrService.CheckInAsync(userId, request);
 
-            var messages = new[]
+                if (!result.Success)
+                {
+                    if (result.ValidationErrors.Any())
+                        return BadRequest(ApiResponse<object>.ValidationErrorResponse(result.ValidationErrors));
+                    
+                    return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
+                }
+
+                return Ok(ApiResponse<CheckInResponse>.SuccessResponse(result.Data!, "Check-in completato con successo"));
+            }
+            catch (Exception ex)
             {
-                "Allah ama chi si sveglia per Lui. 🌙",
-                "Inizia la tua giornata con luce e benedizione.",
-                "Ogni check-in è una vittoria sull'ego."
-            };
-
-            var randomMessage = messages[new Random().Next(messages.Length)];
-
-            return Ok(new { message = "Check-in registrato.", inspiration = randomMessage });
+                _logger.LogError(ex, "Unexpected error during check-in");
+                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
+            }
         }
 
 
 
-        [HttpGet("today-status")]
-        public async Task<IActionResult> TodayStatus()
+
+
+        [Authorize]
+        [HttpGet("user-stats")]
+        public async Task<IActionResult> GetUserStats()
         {
-            var today = DateTime.UtcNow.Date;
+            try
+            {
+                if (!TryGetUserId(out var userId))
+                    return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
-            var result = await _db.FajrCheckIns
-                .Include(f => f.User)
-                .Where(f => f.Date == today)
-                .Select(f => new {
-                    f.User.Name,
-                    f.User.City,
-                    f.Status
-                })
-                .ToListAsync();
+                var result = await _fajrService.GetUserStatsAsync(userId);
 
-            return Ok(result);
-        }
+                if (!result.Success)
+                    return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
 
-        [Authorize(Roles = "Admin")]
-        [HttpGet("missed-checkin")]
-        public async Task<IActionResult> MissedCheckIn()
-        {
-            var today = DateTime.UtcNow.Date;
-            var allUsers = await _db.Users.ToListAsync();
-            var checkedIn = await _db.FajrCheckIns
-                .Where(f => f.Date == today)
-                .Select(f => f.UserId)
-                .ToListAsync();
-
-            var missed = allUsers
-                .Where(u => !checkedIn.Contains(u.Id))
-                .Select(u => new { u.Name, u.City });
-
-            return Ok(missed);
+                return Ok(ApiResponse<UserStatsResponse>.SuccessResponse(result.Data!));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting user stats");
+                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
+            }
         }
 
         [Authorize]
         [HttpGet("my-history")]
-        public async Task<IActionResult> GetMyHistory()
+        public async Task<IActionResult> GetMyHistory([FromQuery] int page = 1, [FromQuery] int pageSize = 30)
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            try
+            {
+                if (!TryGetUserId(out var userId))
+                    return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
-            var data = await _db.FajrCheckIns
-                .Where(c => c.UserId == userId)
-                .OrderByDescending(c => c.Date)
-                .Select(c => new CheckInHistoryDto
+                var result = await _fajrService.GetHistoryAsync(userId);
+
+                if (!result.Success)
+                    return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
+
+                // Apply pagination
+                var totalCount = result.Data!.Count;
+                var paginatedItems = result.Data!
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                var paginatedResponse = new PaginatedResponse<CheckInHistoryDto>
                 {
-                    Date = c.Date,
-                    Status = c.Status.ToString()
-                })
-                .ToListAsync();
+                    Items = paginatedItems,
+                    TotalCount = totalCount,
+                    PageNumber = page,
+                    PageSize = pageSize
+                };
 
-            return Ok(data);
+                return Ok(ApiResponse<PaginatedResponse<CheckInHistoryDto>>.SuccessResponse(paginatedResponse));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting user history");
+                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
+            }
         }
 
         [Authorize]
         [HttpGet("fajr-streak")]
         public async Task<IActionResult> GetFajrStreak()
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
-            var checkIns = await _db.FajrCheckIns
-                .Where(c => c.UserId == userId)
-                .OrderByDescending(c => c.Date)
-                .Select(c => c.Date.Date)
-                .ToListAsync();
-
-            var streak = 0;
-            var current = DateTime.UtcNow.Date;
-
-            foreach (var date in checkIns)
+            try
             {
-                if (date == current)
-                {
-                    streak++;
-                    current = current.AddDays(-1);
-                }
-                else
-                {
-                    break;
-                }
+                if (!TryGetUserId(out var userId))
+                    return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
+
+                var result = await _fajrService.GetStreakAsync(userId);
+
+                if (!result.Success)
+                    return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
+
+                return Ok(ApiResponse<int>.SuccessResponse(result.Data, "Streak calcolato con successo"));
             }
-
-            return Ok(new { streak });
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting streak");
+                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
+            }
         }
 
-        [HttpGet("leaderboard/daily")]
-        public async Task<IActionResult> GetDailyLeaderboard()
-        {
-            var today = DateTime.UtcNow.Date;
-
-            var data = await _db.FajrCheckIns
-                .Where(f => f.Date == today)
-                .Include(f => f.User)
-                .OrderBy(f => f.Status) // opzionale: mettere prima "OnTime"
-                .Select(f => new
-                {
-                    f.User.Name,
-                    f.User.City,
-                    f.Status,
-                    f.Date
-                })
-                .ToListAsync();
-
-            return Ok(data);
-        }
-        [HttpGet("leaderboard/weekly")]
-        public async Task<IActionResult> GetWeeklyLeaderboard()
-        {
-            var startOfWeek = DateTime.UtcNow.Date.AddDays(-(int)DateTime.UtcNow.DayOfWeek);
-
-            var data = await _db.FajrCheckIns
-                .Where(f => f.Date >= startOfWeek)
-                .Include(f => f.User)
-                .GroupBy(f => f.UserId)
-                .Select(g => new
-                {
-                    UserId = g.Key,
-                    Name = g.First().User.Name,
-                    City = g.First().User.City,
-                    Total = g.Count()
-                })
-                .OrderByDescending(x => x.Total)
-                .ToListAsync();
-
-            return Ok(data);
-        }
         [Authorize]
         [HttpGet("has-checked-in")]
         public async Task<IActionResult> HasCheckedInToday()
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var today = DateTime.UtcNow.Date;
+            try
+            {
+                if (!TryGetUserId(out var userId))
+                    return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
-            var hasCheckedIn = await _db.FajrCheckIns
-                .AnyAsync(c => c.UserId == userId && c.Date == today);
+                var result = await _fajrService.HasCheckedInTodayAsync(userId);
 
-            return Ok(new { hasCheckedIn });
+                if (!result.Success)
+                    return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
+
+                return Ok(ApiResponse<bool>.SuccessResponse(result.Data));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking today's check-in");
+                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
+            }
         }
 
+        [HttpGet("leaderboard/daily")]
+        public async Task<IActionResult> GetDailyLeaderboard([FromQuery] int limit = 10)
+        {
+            try
+            {
+                var today = DateTime.UtcNow.Date;
+
+                var leaderboard = await _db.FajrCheckIns
+                    .Where(f => f.Date == today)
+                    .Include(f => f.User)
+                    .OrderBy(f => f.Status)
+                    .ThenBy(f => f.CreatedAt)
+                    .Take(limit)
+                    .Select((f, index) => new LeaderboardEntry
+                    {
+                        UserId = f.UserId,
+                        Name = f.User.Name,
+                        City = f.User.City,
+                        Status = f.Status.ToString(),
+                        Rank = index + 1,
+                        Score = f.Status == CheckInStatus.OnTime ? 10 : f.Status == CheckInStatus.Late ? 5 : 0
+                    })
+                    .ToListAsync();
+
+                return Ok(ApiResponse<List<LeaderboardEntry>>.SuccessResponse(leaderboard));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting daily leaderboard");
+                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
+            }
+        }
+
+        [HttpGet("leaderboard/weekly")]
+        public async Task<IActionResult> GetWeeklyLeaderboard([FromQuery] int limit = 10)
+        {
+            try
+            {
+                var startOfWeek = DateTime.UtcNow.Date.AddDays(-(int)DateTime.UtcNow.DayOfWeek);
+
+                var leaderboard = await _db.FajrCheckIns
+                    .Where(f => f.Date >= startOfWeek)
+                    .Include(f => f.User)
+                    .GroupBy(f => f.UserId)
+                    .Select(g => new LeaderboardEntry
+                    {
+                        UserId = g.Key,
+                        Name = g.First().User.Name,
+                        City = g.First().User.City,
+                        Score = g.Count(),
+                        Status = "Active"
+                    })
+                    .OrderByDescending(x => x.Score)
+                    .Take(limit)
+                    .ToListAsync();
+
+                // Add ranking
+                for (int i = 0; i < leaderboard.Count; i++)
+                {
+                    leaderboard[i].Rank = i + 1;
+                }
+
+                return Ok(ApiResponse<List<LeaderboardEntry>>.SuccessResponse(leaderboard));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting weekly leaderboard");
+                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
+            }
+        }
+
+        [HttpGet("today-status")]
+        public async Task<IActionResult> TodayStatus()
+        {
+            try
+            {
+                var today = DateTime.UtcNow.Date;
+
+                var todayStatus = await _db.FajrCheckIns
+                    .Include(f => f.User)
+                    .Where(f => f.Date == today)
+                    .Select(f => new
+                    {
+                        f.User.Name,
+                        f.User.City,
+                        Status = f.Status.ToString(),
+                        CheckInTime = f.CreatedAt
+                    })
+                    .OrderBy(f => f.CheckInTime)
+                    .ToListAsync();
+
+                return Ok(ApiResponse<object>.SuccessResponse(todayStatus));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting today status");
+                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
+            }
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpGet("missed-checkin")]
+        public async Task<IActionResult> MissedCheckIn()
+        {
+            try
+            {
+                var today = DateTime.UtcNow.Date;
+                
+                var missedUsers = await _db.Users
+                    .Where(u => !_db.FajrCheckIns.Any(f => f.UserId == u.Id && f.Date == today))
+                    .Select(u => new { u.Name, u.City, u.Phone })
+                    .ToListAsync();
+
+                return Ok(ApiResponse<object>.SuccessResponse(new { 
+                    count = missedUsers.Count, 
+                    users = missedUsers 
+                }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting missed check-ins");
+                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
+            }
+        }
+
+        private bool TryGetUserId(out Guid userId)
+        {
+            userId = Guid.Empty;
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+            
+            if (string.IsNullOrEmpty(userIdClaim))
+                return false;
+
+            return Guid.TryParse(userIdClaim, out userId);
+        }
     }
 }

@@ -9,9 +9,10 @@ namespace FajrSquad.Core.Enums
     public enum CheckInStatus
     {
         None = 0,
-        Prayed = 1,
-        Missed = 2,
-        Late = 3
+        OnTime = 1,    
+        Late = 2,      
+        Missed = 3     
     }
+
 
 }

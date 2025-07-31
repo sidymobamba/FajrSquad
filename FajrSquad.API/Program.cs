@@ -67,8 +67,23 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 
+// Configure services
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
 builder.Services.AddScoped<JwtService>();
+builder.Services.AddScoped<IFajrService, FajrService>();
+
+// Add caching
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<ICacheService, MemoryCacheService>();
+
+// Add logging
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+
+// Add health checks
+builder.Services.AddHealthChecks();
+
 
 builder.Services.AddAuthentication(options =>
 {
@@ -121,11 +136,17 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Add custom middleware
+app.UseMiddleware<FajrSquad.API.Middleware.GlobalExceptionMiddleware>();
+app.UseMiddleware<FajrSquad.API.Middleware.RateLimitingMiddleware>();
+
 app.UseHttpsRedirection();
 app.UseCors(policy => policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin());
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHealthChecks("/health");
+
 
 app.Run();

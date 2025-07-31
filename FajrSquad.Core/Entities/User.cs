@@ -6,22 +6,20 @@ using System.Threading.Tasks;
 
 namespace FajrSquad.Core.Entities
 {
-    public class User
+    public class User : BaseEntity  
     {
-        public Guid Id { get; set; }
-        public string Name { get; set; } = default!;
-        public string Phone { get; set; } = default!;
+        public string Name { get; set; } = string.Empty;
+        public string Phone { get; set; } = string.Empty;
         public string? Email { get; set; }
-
         public string PasswordHash { get; set; } = string.Empty;
-
-        public string City { get; set; } = default!;
-        public DateTime RegisteredAt { get; set; } = DateTime.UtcNow;
+        public string City { get; set; } = string.Empty;
+        public string Role { get; set; } = "User";
+        public string? MotivatingBrother { get; set; } 
         public int FajrStreak { get; set; } = 0;
-        public string Role { get; set; }
-
+        public DateTime RegisteredAt { get; set; } = DateTime.UtcNow;
 
         public ICollection<FajrCheckIn> CheckIns { get; set; } = new List<FajrCheckIn>();
     }
+
 
 }

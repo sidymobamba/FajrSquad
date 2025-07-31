@@ -1,26 +1,30 @@
 ﻿using FajrSquad.Core.Entities;
+using FajrSquad.Infrastructure.Data.EntityConfigurations;
 using Microsoft.EntityFrameworkCore;
 
 namespace FajrSquad.Infrastructure.Data
 {
+    // Quello che dovrebbe essere in FajrSquad.Infrastructure/Data/FajrDbContext.cs
     public class FajrDbContext : DbContext
     {
         public FajrDbContext(DbContextOptions<FajrDbContext> options) : base(options) { }
 
         public DbSet<User> Users => Set<User>();
         public DbSet<FajrCheckIn> FajrCheckIns => Set<FajrCheckIn>();
-        public DbSet<DailyMessage> DailyMessages { get; set; }
-        public DbSet<DeviceToken> DeviceTokens { get; set; }
-        public DbSet<ProblemReport> ProblemReports { get; set; }
-
+        public DbSet<OtpCode> OtpCodes => Set<OtpCode>();
+        public DbSet<DailyMessage> DailyMessages => Set<DailyMessage>();
+        public DbSet<DeviceToken> DeviceTokens => Set<DeviceToken>();
+        public DbSet<ProblemReport> ProblemReports => Set<ProblemReport>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<User>().HasKey(u => u.Id);
-            modelBuilder.Entity<FajrCheckIn>().HasKey(f => f.Id);
-            modelBuilder.Entity<FajrCheckIn>()
-                .HasIndex(f => new { f.UserId, f.Date })
-                .IsUnique();
+            // Applicare tutte le configurazioni
+            modelBuilder.ApplyConfiguration(new UserConfiguration());
+            modelBuilder.ApplyConfiguration(new FajrCheckInConfiguration());
+            modelBuilder.ApplyConfiguration(new OtpCodeConfiguration());
+
+            base.OnModelCreating(modelBuilder);
         }
     }
+
 }
