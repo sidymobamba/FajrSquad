@@ -71,10 +71,17 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<IFajrService, FajrService>();
+builder.Services.AddScoped<IFileUploadService, FileUploadService>();
 
 // Add caching
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ICacheService, MemoryCacheService>();
+
+// Configure static files for avatar uploads
+builder.Services.Configure<StaticFileOptions>(options =>
+{
+    options.ServeUnknownFileTypes = false;
+});
 
 // Add logging
 builder.Logging.ClearProviders();
@@ -122,11 +129,20 @@ builder.Services.AddAuthentication(options =>
 
 var app = builder.Build();
 
-//using (var scope = app.Services.CreateScope())
-//{
-//    var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
-//    db.Database.Migrate(); // Applica automaticamente le migrazioni all'avvio
-//}
+// Database initialization and seeding
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
+    
+    // Apply migrations
+    db.Database.Migrate();
+    
+    // Seed Islamic data in development
+    if (app.Environment.IsDevelopment())
+    {
+        await IslamicDataSeeder.SeedAsync(db);
+    }
+}
 
 
 // Configure the HTTP request pipeline.
@@ -141,6 +157,10 @@ app.UseMiddleware<FajrSquad.API.Middleware.GlobalExceptionMiddleware>();
 app.UseMiddleware<FajrSquad.API.Middleware.RateLimitingMiddleware>();
 
 app.UseHttpsRedirection();
+
+// Enable static files for avatar uploads
+app.UseStaticFiles();
+
 app.UseCors(policy => policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin());
 app.UseAuthentication();
 app.UseAuthorization();

@@ -42,10 +42,10 @@ namespace FajrSquad.Infrastructure.Data.EntityConfigurations
                 .HasDefaultValue(0);
                 
             builder.Property(u => u.RegisteredAt)
-                .HasDefaultValueSql("GETUTCDATE()");
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
                 
             builder.Property(u => u.CreatedAt)
-                .HasDefaultValueSql("GETUTCDATE()");
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
                 
             builder.Property(u => u.IsDeleted)
                 .HasDefaultValue(false);

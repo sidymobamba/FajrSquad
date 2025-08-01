@@ -25,7 +25,7 @@ namespace FajrSquad.Infrastructure.Data.EntityConfigurations
                 .HasMaxLength(500);
                 
             builder.Property(f => f.CreatedAt)
-                .HasDefaultValueSql("GETUTCDATE()");
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
                 
             builder.Property(f => f.IsDeleted)
                 .HasDefaultValue(false);
