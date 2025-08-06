@@ -28,7 +28,9 @@ namespace FajrSquad.Infrastructure.Services
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new Claim("name", user.Name),
                 new Claim("phone", user.Phone),
-                new Claim(ClaimTypes.Role, user.Role ?? "User")
+                new Claim(ClaimTypes.Role, user.Role ?? "User"),
+                new Claim("city", user.City ?? "Roma"),
+
             };
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));

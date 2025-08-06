@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json.Serialization;
 using FajrSquad.Core.Config;
 using FajrSquad.Infrastructure.Data;
@@ -9,38 +9,33 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
-var provider = builder.Configuration["DatabaseProvider"];
+var configuration = builder.Configuration;
+var provider = configuration["DatabaseProvider"];
 
+// 🔹 Database
 builder.Services.AddDbContext<FajrDbContext>(options =>
 {
-    var cs = builder.Configuration.GetConnectionString("DefaultConnection");
-
+    var cs = configuration.GetConnectionString("DefaultConnection");
     if (provider == "postgres")
         options.UseNpgsql(cs);
     else
-        options.UseSqlServer(cs); // o MySQL se serve
+        options.UseSqlServer(cs);
 });
 
-
-
-// Add services to the container.
-builder.Services.AddControllers();
-
+// 🔹 Controllers + JSON + Newtonsoft
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
-    });
+    })
+    .AddNewtonsoftJson(); // NECESSARIO per JObject
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+// 🔹 Swagger + JWT auth
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "FajrSquad API", Version = "v1" });
-
-    // JWT Bearer config
-    c.AddSecurityDefinition("Bearer", new()
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
         Type = SecuritySchemeType.Http,
@@ -49,67 +44,40 @@ builder.Services.AddSwaggerGen(c =>
         In = ParameterLocation.Header,
         Description = "Inserisci il token JWT nel formato: Bearer {token}"
     });
-
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
             },
             Array.Empty<string>()
         }
     });
 });
 
-
-// Configure services
-builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
+// 🔹 Jwt settings e auth
+builder.Services.Configure<JwtSettings>(configuration.GetSection("Jwt"));
 builder.Services.AddScoped<JwtService>();
-builder.Services.AddScoped<IFajrService, FajrService>();
-builder.Services.AddScoped<IFileUploadService, FileUploadService>();
-
-// Add caching
-builder.Services.AddMemoryCache();
-builder.Services.AddScoped<ICacheService, MemoryCacheService>();
-
-// Configure static files for avatar uploads
-builder.Services.Configure<StaticFileOptions>(options =>
-{
-    options.ServeUnknownFileTypes = false;
-});
-
-// Add logging
-builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
-builder.Logging.AddDebug();
-
-// Add health checks
-builder.Services.AddHealthChecks();
-
 
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-}).AddJwtBearer(options =>
+})
+.AddJwtBearer(options =>
 {
-    var settings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>()!;
+    var jwtSettings = configuration.GetSection("Jwt").Get<JwtSettings>()!;
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = settings.Issuer,
-        ValidAudience = settings.Audience,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(settings.Secret))
+        ValidIssuer = jwtSettings.Issuer,
+        ValidAudience = jwtSettings.Audience,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Secret))
     };
-
     options.Events = new JwtBearerEvents
     {
         OnAuthenticationFailed = context =>
@@ -125,48 +93,53 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+// 🔹 Dependency injection
+builder.Services.AddScoped<IFajrService, FajrService>();
+builder.Services.AddScoped<IFileUploadService, FileUploadService>();
+builder.Services.AddScoped<ICacheService, MemoryCacheService>();
 
+// 🔹 HttpClient per chiamate API esterne
+builder.Services.AddHttpClient();
+
+// 🔹 Caching + static files + logging
+builder.Services.AddMemoryCache();
+builder.Services.Configure<StaticFileOptions>(options => options.ServeUnknownFileTypes = false);
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
-// Database initialization and seeding
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
-    
-    // Apply migrations
-    db.Database.Migrate();
-    
-    // Seed Islamic data in development
-    if (app.Environment.IsDevelopment())
-    {
-        await IslamicDataSeeder.SeedAsync(db);
-    }
-}
-
-
-// Configure the HTTP request pipeline.
+// 🔹 Dev-only: Swagger + eccezioni
 if (app.Environment.IsDevelopment())
 {
+    app.UseDeveloperExceptionPage(); // Mostra eccezioni dettagliate
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Add custom middleware
+// 🔹 DB seeding (opzionale)
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
+    // db.Database.Migrate(); // solo se hai le migration
+    // await IslamicDataSeeder.SeedAsync(db); // opzionale
+}
+
+// 🔹 Middleware personalizzati
 app.UseMiddleware<FajrSquad.API.Middleware.GlobalExceptionMiddleware>();
 app.UseMiddleware<FajrSquad.API.Middleware.RateLimitingMiddleware>();
 
+// 🔹 Middlewares standard
 app.UseHttpsRedirection();
-
-// Enable static files for avatar uploads
 app.UseStaticFiles();
-
 app.UseCors(policy => policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin());
 app.UseAuthentication();
 app.UseAuthorization();
 
+// 🔹 Routing
 app.MapControllers();
 app.MapHealthChecks("/health");
-
 
 app.Run();

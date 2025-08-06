@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using FajrSquad.Infrastructure.Data;
 using FajrSquad.Core.DTOs;
 using Microsoft.EntityFrameworkCore;
+using FajrSquad.Core.Entities;
+using Newtonsoft.Json.Linq;
+using System.ComponentModel.DataAnnotations;
 
 namespace FajrSquad.API.Controllers
 {
@@ -134,31 +137,70 @@ namespace FajrSquad.API.Controllers
 
         [Authorize(Roles = "Admin")]
         [HttpPost]
-        public async Task<IActionResult> CreateMotivation([FromBody] CreateMotivationRequest request)
+        public async Task<IActionResult> CreateMotivations([FromBody] JToken payload)
         {
             try
             {
-                var motivation = new FajrSquad.Core.Entities.Motivation
-                {
-                    Text = request.Text,
-                    Type = request.Type,
-                    Theme = request.Theme,
-                    Priority = request.Priority,
-                    Language = request.Language,
-                    Author = request.Author,
-                    IsActive = true
-                };
+                List<CreateMotivationRequest> requests;
 
-                _context.Motivations.Add(motivation);
+                if (payload.Type == JTokenType.Array)
+                {
+                    // Validazione: deve essere un array di oggetti
+                    if (!payload.All(i => i.Type == JTokenType.Object))
+                    {
+                        return BadRequest(ApiResponse<object>.ErrorResponse("Ogni elemento dell'array deve essere un oggetto JSON valido."));
+                    }
+
+                    requests = payload.ToObject<List<CreateMotivationRequest>>()!;
+                }
+                else if (payload.Type == JTokenType.Object)
+                {
+                    var single = payload.ToObject<CreateMotivationRequest>()!;
+                    requests = new List<CreateMotivationRequest> { single };
+                }
+                else
+                {
+                    return BadRequest(ApiResponse<object>.ErrorResponse("Formato JSON non valido."));
+                }
+
+                // Validazione manuale
+                var allErrors = new List<string>();
+                foreach (var r in requests)
+                {
+                    var ctx = new ValidationContext(r);
+                    var results = new List<ValidationResult>();
+                    if (!Validator.TryValidateObject(r, ctx, results, true))
+                    {
+                        allErrors.AddRange(results.Select(x => x.ErrorMessage!));
+                    }
+                }
+
+                if (allErrors.Any())
+                    return BadRequest(ApiResponse<object>.ValidationErrorResponse(allErrors));
+
+                // Mapping e salvataggio
+                var entities = requests.Select(r => new Motivation
+                {
+                    Text = r.Text,
+                    Type = r.Type,
+                    Theme = r.Theme,
+                    Priority = r.Priority,
+                    Language = r.Language,
+                    Author = r.Author,
+                    IsActive = true
+                }).ToList();
+
+                await _context.Motivations.AddRangeAsync(entities);
                 await _context.SaveChangesAsync();
 
-                return Ok(ApiResponse<object>.SuccessResponse(motivation, "Motivation creata con successo"));
+                return Ok(ApiResponse<object>.SuccessResponse(entities, $"{entities.Count} motivazioni inserite con successo"));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error creating motivation");
+                _logger.LogError(ex, $"Errore inserimento motivation: {ex.Message}");
                 return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
             }
         }
+
     }
 }

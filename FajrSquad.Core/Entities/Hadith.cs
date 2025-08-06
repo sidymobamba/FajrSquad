@@ -28,6 +28,6 @@ namespace FajrSquad.Core.Entities
         public bool IsActive { get; set; } = true;
 
         [StringLength(50)]
-        public string Language { get; set; } = "fr"; // fr, ar, en
+        public string Language { get; set; } = "it"; // fr, ar, en
     }
 }

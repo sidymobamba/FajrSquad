@@ -28,7 +28,7 @@ namespace FajrSquad.Core.DTOs
         public int Priority { get; set; } = 1;
 
         [StringLength(50)]
-        public string Language { get; set; } = "fr";
+        public string Language { get; set; } = "it";
     }
 
     // Motivation DTOs

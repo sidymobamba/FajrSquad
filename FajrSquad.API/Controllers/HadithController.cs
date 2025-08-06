@@ -3,6 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 using FajrSquad.Infrastructure.Data;
 using FajrSquad.Core.DTOs;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
+using FajrSquad.Core.Entities;
+using Newtonsoft.Json.Linq;
+using System.ComponentModel.DataAnnotations;
 
 namespace FajrSquad.API.Controllers
 {
@@ -135,32 +139,71 @@ namespace FajrSquad.API.Controllers
 
         [Authorize(Roles = "Admin")]
         [HttpPost]
-        public async Task<IActionResult> CreateHadith([FromBody] CreateHadithRequest request)
+        public async Task<IActionResult> CreateHadiths([FromBody] JToken payload)
         {
             try
             {
-                var hadith = new FajrSquad.Core.Entities.Hadith
-                {
-                    Text = request.Text,
-                    TextArabic = request.TextArabic,
-                    Source = request.Source,
-                    Category = request.Category,
-                    Theme = request.Theme,
-                    Priority = request.Priority,
-                    Language = request.Language,
-                    IsActive = true
-                };
+                List<CreateHadithRequest> requests;
 
-                _context.Hadiths.Add(hadith);
+                if (payload.Type == JTokenType.Array)
+                {
+                    // Validazione: deve essere un array di oggetti
+                    if (!payload.All(i => i.Type == JTokenType.Object))
+                    {
+                        return BadRequest(ApiResponse<object>.ErrorResponse("Ogni elemento dell'array deve essere un oggetto JSON valido."));
+                    }
+
+                    requests = payload.ToObject<List<CreateHadithRequest>>()!;
+                }
+                else if (payload.Type == JTokenType.Object)
+                {
+                    var single = payload.ToObject<CreateHadithRequest>()!;
+                    requests = new List<CreateHadithRequest> { single };
+                }
+                else
+                {
+                    return BadRequest(ApiResponse<object>.ErrorResponse("Formato JSON non valido."));
+                }
+
+                // Validazione manuale
+                var allErrors = new List<string>();
+                foreach (var r in requests)
+                {
+                    var ctx = new ValidationContext(r);
+                    var results = new List<ValidationResult>();
+                    if (!Validator.TryValidateObject(r, ctx, results, true))
+                    {
+                        allErrors.AddRange(results.Select(x => x.ErrorMessage!));
+                    }
+                }
+
+                if (allErrors.Any())
+                    return BadRequest(ApiResponse<object>.ValidationErrorResponse(allErrors));
+
+                // Mapping e salvataggio
+                var entities = requests.Select(r => new Hadith
+                {
+                    Text = r.Text,
+                    TextArabic = r.TextArabic,
+                    Source = r.Source,
+                    Category = r.Category,
+                    Theme = r.Theme,
+                    Priority = r.Priority,
+                    Language = r.Language,
+                    IsActive = true
+                }).ToList();
+
+                await _context.Hadiths.AddRangeAsync(entities);
                 await _context.SaveChangesAsync();
 
-                return Ok(ApiResponse<object>.SuccessResponse(hadith, "Hadith creato con successo"));
+                return Ok(ApiResponse<object>.SuccessResponse(entities, $"{entities.Count} hadith inseriti con successo"));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error creating hadith");
+                _logger.LogError(ex, $"Errore inserimento hadith: {ex.Message}");
                 return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
             }
         }
+
     }
 }
