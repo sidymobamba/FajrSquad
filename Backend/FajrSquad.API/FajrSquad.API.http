@@ -1,0 +1,6 @@
+@FajrSquad.API_HostAddress = http://localhost:5057
+
+GET {{FajrSquad.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

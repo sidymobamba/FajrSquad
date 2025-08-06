@@ -53,7 +53,7 @@ namespace FajrSquad.API.Middleware
         {
             return endpoint.ToLower() switch
             {
-                var path when path.Contains("/auth/login") => 5,  // 5 login attempts per minute
+                //var path when path.Contains("/auth/login") => 5,  // 5 login attempts per minute
                 var path when path.Contains("/otp/send") => 3,    // 3 OTP requests per minute
                 var path when path.Contains("/fajr/checkin") => 2, // 2 check-in attempts per minute
                 _ => 60 // Default: 60 requests per minute
