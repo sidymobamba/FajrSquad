@@ -19,10 +19,16 @@ var configuration = builder.Configuration;
 var provider = configuration["DatabaseProvider"];
 
 // 🔹 Firebase Admin SDK (solo per FCM)
+var json = Environment.GetEnvironmentVariable("FIREBASE_CONFIG_JSON");
+
+if (string.IsNullOrWhiteSpace(json))
+    throw new InvalidOperationException("FIREBASE_CONFIG_JSON environment variable is not set.");
+
 FirebaseApp.Create(new AppOptions()
 {
-    Credential = GoogleCredential.FromFile("FIREBASE_CONFIG_JSON")
+    Credential = GoogleCredential.FromJson(json)
 });
+
 
 // 🔹 Database (SQL Server o PostgreSQL)
 builder.Services.AddDbContext<FajrDbContext>(options =>
