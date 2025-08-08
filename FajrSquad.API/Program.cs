@@ -21,7 +21,7 @@ var provider = configuration["DatabaseProvider"];
 // 🔹 Firebase Admin SDK (solo per FCM)
 FirebaseApp.Create(new AppOptions()
 {
-    Credential = GoogleCredential.FromFile("firebase-service-account.json")
+    Credential = GoogleCredential.FromFile("FIREBASE_CONFIG_JSON")
 });
 
 // 🔹 Database (SQL Server o PostgreSQL)
