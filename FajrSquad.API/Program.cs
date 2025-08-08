@@ -3,28 +3,16 @@ using System.Text.Json.Serialization;
 using FajrSquad.Core.Config;
 using FajrSquad.Infrastructure.Data;
 using FajrSquad.Infrastructure.Services;
-using FirebaseAdmin;
-using Google.Apis.Auth.OAuth2;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using Quartz;
-using FajrSquad.API.Jobs;
-using Microsoft.Extensions.DependencyInjection;
-using FajrSquad.Core.Profiles;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 var provider = configuration["DatabaseProvider"];
 
-// 🔹 Firebase Admin SDK (solo per FCM)
-FirebaseApp.Create(new AppOptions()
-{
-    Credential = GoogleCredential.FromFile("firebase-service-account.json")
-});
-
-// 🔹 Database (SQL Server o PostgreSQL)
+// 🔹 Database
 builder.Services.AddDbContext<FajrDbContext>(options =>
 {
     var cs = configuration.GetConnectionString("DefaultConnection");
@@ -34,38 +22,43 @@ builder.Services.AddDbContext<FajrDbContext>(options =>
         options.UseSqlServer(cs);
 });
 
-// 🔹 Dependency Injection
-builder.Services.AddScoped<IFajrService, FajrService>();
-builder.Services.AddScoped<IFileUploadService, FileUploadService>();
-builder.Services.AddScoped<ICacheService, MemoryCacheService>();
-builder.Services.AddScoped<JwtService>();
-builder.Services.AddScoped<NotificationService>();
+// 🔹 Controllers + JSON + Newtonsoft
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    })
+    .AddNewtonsoftJson(); // NECESSARIO per JObject
 
-// 🔹 Quartz Jobs (notifiche programmate)
-builder.Services.AddQuartz(q =>
+// 🔹 Swagger + JWT auth
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
 {
-    q.UseMicrosoftDependencyInjectionJobFactory();
-
-    q.ScheduleJob<SendMorningMotivationJob>(t => t
-        .WithIdentity("morningMotivation")
-        .WithCronSchedule("0 0 6 * * ?")); // 06:00
-
-    q.ScheduleJob<SendAfternoonMotivationJob>(t => t
-        .WithIdentity("afternoonMotivation")
-        .WithCronSchedule("0 0 14 * * ?")); // 14:00
-
-    q.ScheduleJob<SendEveningMotivationJob>(t => t
-        .WithIdentity("eveningMotivation")
-        .WithCronSchedule("0 0 20 * * ?")); // 20:00
-
-    q.ScheduleJob<SendHadithJob>(t => t
-        .WithIdentity("dailyHadith")
-        .WithCronSchedule("0 5 14 * * ?")); // 14:05
+    c.SwaggerDoc("v1", new() { Title = "FajrSquad API", Version = "v1" });
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Inserisci il token JWT nel formato: Bearer {token}"
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+            },
+            Array.Empty<string>()
+        }
+    });
 });
-builder.Services.AddQuartzHostedService();
 
-// 🔹 JWT Auth
+// 🔹 Jwt settings e auth
 builder.Services.Configure<JwtSettings>(configuration.GetSection("Jwt"));
+builder.Services.AddScoped<JwtService>();
 
 builder.Services.AddAuthentication(options =>
 {
@@ -100,79 +93,47 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// 🔹 Swagger + Auth support
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new() { Title = "FajrSquad API", Version = "v1" });
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "Bearer",
-        BearerFormat = "JWT",
-        In = ParameterLocation.Header,
-        Description = "Inserisci il token JWT nel formato: Bearer {token}"
-    });
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
-            },
-            Array.Empty<string>()
-        }
-    });
-});
+// 🔹 Dependency injection
+builder.Services.AddScoped<IFajrService, FajrService>();
+builder.Services.AddScoped<IFileUploadService, FileUploadService>();
+builder.Services.AddScoped<ICacheService, MemoryCacheService>();
 
-// 🔹 Controllers (System.Text.Json + Newtonsoft support)
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
-    })
-    .AddNewtonsoftJson(); // Per JObject
-
-// 🔹 Extra services
+// 🔹 HttpClient per chiamate API esterne
 builder.Services.AddHttpClient();
+
+// 🔹 Caching + static files + logging
 builder.Services.AddMemoryCache();
-builder.Services.AddHealthChecks();
 builder.Services.Configure<StaticFileOptions>(options => options.ServeUnknownFileTypes = false);
-builder.Services.AddAutoMapper(typeof(FajrProfile)); // Scansiona tutti i profili nell’assembly
-
-
-// 🔹 Logging
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
-// 🔹 Dev tools
+// 🔹 Dev-only: Swagger + eccezioni
 if (app.Environment.IsDevelopment())
 {
-    app.UseDeveloperExceptionPage();
+    app.UseDeveloperExceptionPage(); // Mostra eccezioni dettagliate
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// 🔹 DB seeding (facoltativo)
+// 🔹 DB seeding (opzionale)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
-    // db.Database.Migrate(); // attiva se vuoi migrazioni automatiche
-    // await IslamicDataSeeder.SeedAsync(db); // se usi seeder
+    // db.Database.Migrate(); // solo se hai le migration
+    // await IslamicDataSeeder.SeedAsync(db); // opzionale
 }
 
 // 🔹 Middleware personalizzati
 app.UseMiddleware<FajrSquad.API.Middleware.GlobalExceptionMiddleware>();
 app.UseMiddleware<FajrSquad.API.Middleware.RateLimitingMiddleware>();
 
-// 🔹 Middleware standard
+// 🔹 Middlewares standard
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-app.UseCors("AllowLocalhostFrontend");
 app.UseCors(policy => policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin());
 app.UseAuthentication();
 app.UseAuthorization();

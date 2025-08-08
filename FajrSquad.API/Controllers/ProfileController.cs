@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using FajrSquad.Infrastructure.Services;
 using FajrSquad.Infrastructure.Data;
@@ -7,7 +7,6 @@ using FajrSquad.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using BCrypt.Net;
-using AutoMapper;
 
 namespace FajrSquad.API.Controllers
 {
@@ -20,20 +19,17 @@ namespace FajrSquad.API.Controllers
         private readonly FajrDbContext _context;
         private readonly IFajrService _fajrService;
         private readonly ILogger<ProfileController> _logger;
-        private readonly IMapper _mapper;
 
         public ProfileController(
             IFileUploadService fileUploadService, 
             FajrDbContext context,
             IFajrService fajrService,
-            ILogger<ProfileController> logger,
-            IMapper mapper)
+            ILogger<ProfileController> logger)
         {
             _fileUploadService = fileUploadService;
             _context = context;
             _fajrService = fajrService;
             _logger = logger;
-            _mapper = mapper;
         }
 
         [HttpPost("upload-avatar")]
@@ -135,47 +131,44 @@ namespace FajrSquad.API.Controllers
                 if (!TryGetUserId(out var userId))
                     return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+                var user = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Id == userId);
+
+                // Get user settings separately since the relationship might not exist yet
+                var userSettings = await _context.UserSettings
+                    .FirstOrDefaultAsync(s => s.UserId == userId);
+
                 if (user == null)
                     return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
 
-                _logger.LogInformation("👤 Utente trovato: {Name}", user.Name);
-
-                var userSettings = await _context.UserSettings
-                    .FirstOrDefaultAsync(s => s.UserId == userId && !s.IsDeleted);
-                _logger.LogInformation("⚙️  UserSettings trovate: {Found}", userSettings != null);
-
+                // Get user stats
                 var statsResult = await _fajrService.GetUserStatsAsync(userId);
-                _logger.LogInformation("📊 Stats: Success={Success}", statsResult.Success);
-
                 var avatarResult = await _fileUploadService.GetAvatarUrlAsync(userId);
-                _logger.LogInformation("🖼️ Avatar: Success={Success}", avatarResult.Success);
 
-                var profileDto = new UserProfileDto
+                var profileData = new
                 {
-                    Id = user.Id,
-                    Name = user.Name,
-                    Email = user.Email,
-                    Phone = user.Phone,
-                    City = user.City,
-                    Role = user.Role,
-                    RegisteredAt = user.RegisteredAt,
+                    user.Id,
+                    user.Name,
+                    user.Email,
+                    user.Phone,
+                    user.City,
+                    user.Role,
+                    // MotivatingBrother = "", // Will be available after updating User entity
+                    user.RegisteredAt,
                     ProfilePictureUrl = avatarResult.Success ? avatarResult.Data : null,
                     HasAvatar = avatarResult.Success && !string.IsNullOrEmpty(avatarResult.Data),
                     Stats = statsResult.Success ? statsResult.Data : null,
-                    Settings = userSettings != null ? _mapper.Map<UserSettingsDto>(userSettings) : null
+                    Settings = userSettings
                 };
 
-                return Ok(ApiResponse<UserProfileDto>.SuccessResponse(profileDto));
+                return Ok(ApiResponse<object>.SuccessResponse(profileData));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Errore durante il recupero del profilo");
+                _logger.LogError(ex, "Error getting user profile");
                 return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
             }
         }
-
-
 
         [HttpPut("update")]
         public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
