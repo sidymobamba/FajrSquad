@@ -360,4 +360,5 @@ MigrationBackup/
 .ionide/
 
 # Fody - auto-generated XML schema
-FodyWeavers.xsd
+FodyWeavers.xsd"FajrSquad.API/firebase-service-account.json" 
+FajrSquad.API/firebase-service-account.json
