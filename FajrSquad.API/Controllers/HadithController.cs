@@ -3,10 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using FajrSquad.Infrastructure.Data;
 using FajrSquad.Core.DTOs;
 using Microsoft.EntityFrameworkCore;
-using Newtonsoft.Json;
-using FajrSquad.Core.Entities;
 using Newtonsoft.Json.Linq;
 using System.ComponentModel.DataAnnotations;
+using FajrSquad.Core.Entities;
 
 namespace FajrSquad.API.Controllers
 {
@@ -16,6 +15,7 @@ namespace FajrSquad.API.Controllers
     {
         private readonly FajrDbContext _context;
         private readonly ILogger<HadithController> _logger;
+        private const string DefaultLanguage = "it";
 
         public HadithController(FajrDbContext context, ILogger<HadithController> logger)
         {
@@ -24,19 +24,19 @@ namespace FajrSquad.API.Controllers
         }
 
         [HttpGet("morning")]
-        public async Task<IActionResult> GetMorningHadith([FromQuery] string language = "fr")
+        public async Task<IActionResult> GetMorningHadith()
         {
             try
             {
                 var hadith = await _context.Hadiths
-                    .Where(h => h.Category == "morning" && h.Language == language && h.IsActive && !h.IsDeleted)
+                    .Where(h => h.Category == "morning" && h.Language == DefaultLanguage && h.IsActive && !h.IsDeleted)
                     .OrderBy(h => h.Priority)
-                    .ThenBy(h => Guid.NewGuid()) // Random among same priority
+                    .ThenBy(h => Guid.NewGuid())
                     .FirstOrDefaultAsync();
 
                 if (hadith == null)
                 {
-                    // Fallback to any morning hadith
+                    // fallback senza filtro lingua
                     hadith = await _context.Hadiths
                         .Where(h => h.Category == "morning" && h.IsActive && !h.IsDeleted)
                         .OrderBy(h => Guid.NewGuid())
@@ -53,19 +53,12 @@ namespace FajrSquad.API.Controllers
         }
 
         [HttpGet("random")]
-        public async Task<IActionResult> GetRandomHadith([FromQuery] string? category = null, [FromQuery] string language = "fr")
+        public async Task<IActionResult> GetRandomHadith()
         {
             try
             {
-                var query = _context.Hadiths
-                    .Where(h => h.Language == language && h.IsActive && !h.IsDeleted);
-
-                if (!string.IsNullOrEmpty(category))
-                {
-                    query = query.Where(h => h.Category == category);
-                }
-
-                var hadith = await query
+                var hadith = await _context.Hadiths
+                    .Where(h => h.Language == DefaultLanguage && h.IsActive && !h.IsDeleted)
                     .OrderBy(h => Guid.NewGuid())
                     .FirstOrDefaultAsync();
 
@@ -79,35 +72,25 @@ namespace FajrSquad.API.Controllers
         }
 
         [HttpGet("all")]
-        public async Task<IActionResult> GetAllHadiths([FromQuery] string? category = null, [FromQuery] string language = "fr", [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        public async Task<IActionResult> GetAllHadiths()
         {
             try
             {
-                var query = _context.Hadiths
-                    .Where(h => h.Language == language && h.IsActive && !h.IsDeleted);
-
-                if (!string.IsNullOrEmpty(category))
-                {
-                    query = query.Where(h => h.Category == category);
-                }
-
-                var totalCount = await query.CountAsync();
-                var hadiths = await query
+                var hadiths = await _context.Hadiths
+                    .Where(h => h.Language == DefaultLanguage && h.IsActive && !h.IsDeleted)
                     .OrderBy(h => h.Priority)
                     .ThenBy(h => h.CreatedAt)
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
                     .ToListAsync();
 
-                var paginatedResponse = new PaginatedResponse<object>
+                var response = new PaginatedResponse<object>
                 {
                     Items = hadiths.Cast<object>().ToList(),
-                    TotalCount = totalCount,
-                    PageNumber = page,
-                    PageSize = pageSize
+                    TotalCount = hadiths.Count,
+                    PageNumber = 1,
+                    PageSize = hadiths.Count
                 };
 
-                return Ok(ApiResponse<PaginatedResponse<object>>.SuccessResponse(paginatedResponse));
+                return Ok(ApiResponse<PaginatedResponse<object>>.SuccessResponse(response));
             }
             catch (Exception ex)
             {
@@ -122,7 +105,7 @@ namespace FajrSquad.API.Controllers
             try
             {
                 var categories = await _context.Hadiths
-                    .Where(h => h.IsActive && !h.IsDeleted)
+                    .Where(h => h.Language == DefaultLanguage && h.IsActive && !h.IsDeleted)
                     .Select(h => h.Category)
                     .Distinct()
                     .OrderBy(c => c)
@@ -147,11 +130,8 @@ namespace FajrSquad.API.Controllers
 
                 if (payload.Type == JTokenType.Array)
                 {
-                    // Validazione: deve essere un array di oggetti
                     if (!payload.All(i => i.Type == JTokenType.Object))
-                    {
                         return BadRequest(ApiResponse<object>.ErrorResponse("Ogni elemento dell'array deve essere un oggetto JSON valido."));
-                    }
 
                     requests = payload.ToObject<List<CreateHadithRequest>>()!;
                 }
@@ -165,22 +145,19 @@ namespace FajrSquad.API.Controllers
                     return BadRequest(ApiResponse<object>.ErrorResponse("Formato JSON non valido."));
                 }
 
-                // Validazione manuale
+                // Validazione
                 var allErrors = new List<string>();
                 foreach (var r in requests)
                 {
                     var ctx = new ValidationContext(r);
                     var results = new List<ValidationResult>();
                     if (!Validator.TryValidateObject(r, ctx, results, true))
-                    {
                         allErrors.AddRange(results.Select(x => x.ErrorMessage!));
-                    }
                 }
-
                 if (allErrors.Any())
                     return BadRequest(ApiResponse<object>.ValidationErrorResponse(allErrors));
 
-                // Mapping e salvataggio
+                // Mapping e salvataggio (forziamo lingua = it)
                 var entities = requests.Select(r => new Hadith
                 {
                     Text = r.Text,
@@ -189,7 +166,7 @@ namespace FajrSquad.API.Controllers
                     Category = r.Category,
                     Theme = r.Theme,
                     Priority = r.Priority,
-                    Language = r.Language,
+                    Language = DefaultLanguage,
                     IsActive = true
                 }).ToList();
 
@@ -204,6 +181,5 @@ namespace FajrSquad.API.Controllers
                 return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
             }
         }
-
     }
 }

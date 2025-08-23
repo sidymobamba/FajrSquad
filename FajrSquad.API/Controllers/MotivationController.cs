@@ -15,6 +15,7 @@ namespace FajrSquad.API.Controllers
     {
         private readonly FajrDbContext _context;
         private readonly ILogger<MotivationController> _logger;
+        private const string DefaultLanguage = "it";
 
         public MotivationController(FajrDbContext context, ILogger<MotivationController> logger)
         {
@@ -23,19 +24,19 @@ namespace FajrSquad.API.Controllers
         }
 
         [HttpGet("evening")]
-        public async Task<IActionResult> GetEveningMotivation([FromQuery] string language = "fr")
+        public async Task<IActionResult> GetEveningMotivation()
         {
             try
             {
                 var motivation = await _context.Motivations
-                    .Where(m => m.Type == "night" && m.Language == language && m.IsActive && !m.IsDeleted)
+                    .Where(m => m.Type == "night" && m.Language == DefaultLanguage && m.IsActive && !m.IsDeleted)
                     .OrderBy(m => m.Priority)
                     .ThenBy(m => Guid.NewGuid())
                     .FirstOrDefaultAsync();
 
                 if (motivation == null)
                 {
-                    // Fallback to any evening motivation
+                    // fallback senza filtro lingua
                     motivation = await _context.Motivations
                         .Where(m => m.Type == "night" && m.IsActive && !m.IsDeleted)
                         .OrderBy(m => Guid.NewGuid())
@@ -52,12 +53,12 @@ namespace FajrSquad.API.Controllers
         }
 
         [HttpGet("fajr")]
-        public async Task<IActionResult> GetFajrMotivation([FromQuery] string language = "fr")
+        public async Task<IActionResult> GetFajrMotivation()
         {
             try
             {
                 var motivation = await _context.Motivations
-                    .Where(m => m.Type == "fajr" && m.Language == language && m.IsActive && !m.IsDeleted)
+                    .Where(m => m.Type == "fajr" && m.Language == DefaultLanguage && m.IsActive && !m.IsDeleted)
                     .OrderBy(m => m.Priority)
                     .ThenBy(m => Guid.NewGuid())
                     .FirstOrDefaultAsync();
@@ -72,19 +73,12 @@ namespace FajrSquad.API.Controllers
         }
 
         [HttpGet("random")]
-        public async Task<IActionResult> GetRandomMotivation([FromQuery] string? type = null, [FromQuery] string language = "fr")
+        public async Task<IActionResult> GetRandomMotivation()
         {
             try
             {
-                var query = _context.Motivations
-                    .Where(m => m.Language == language && m.IsActive && !m.IsDeleted);
-
-                if (!string.IsNullOrEmpty(type))
-                {
-                    query = query.Where(m => m.Type == type);
-                }
-
-                var motivation = await query
+                var motivation = await _context.Motivations
+                    .Where(m => m.Language == DefaultLanguage && m.IsActive && !m.IsDeleted)
                     .OrderBy(m => Guid.NewGuid())
                     .FirstOrDefaultAsync();
 
@@ -98,35 +92,25 @@ namespace FajrSquad.API.Controllers
         }
 
         [HttpGet("all")]
-        public async Task<IActionResult> GetAllMotivations([FromQuery] string? type = null, [FromQuery] string language = "fr", [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        public async Task<IActionResult> GetAllMotivations()
         {
             try
             {
-                var query = _context.Motivations
-                    .Where(m => m.Language == language && m.IsActive && !m.IsDeleted);
-
-                if (!string.IsNullOrEmpty(type))
-                {
-                    query = query.Where(m => m.Type == type);
-                }
-
-                var totalCount = await query.CountAsync();
-                var motivations = await query
+                var motivations = await _context.Motivations
+                    .Where(m => m.Language == DefaultLanguage && m.IsActive && !m.IsDeleted)
                     .OrderBy(m => m.Priority)
                     .ThenBy(m => m.CreatedAt)
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
                     .ToListAsync();
 
-                var paginatedResponse = new PaginatedResponse<object>
+                var response = new PaginatedResponse<object>
                 {
                     Items = motivations.Cast<object>().ToList(),
-                    TotalCount = totalCount,
-                    PageNumber = page,
-                    PageSize = pageSize
+                    TotalCount = motivations.Count,
+                    PageNumber = 1,
+                    PageSize = motivations.Count
                 };
 
-                return Ok(ApiResponse<PaginatedResponse<object>>.SuccessResponse(paginatedResponse));
+                return Ok(ApiResponse<PaginatedResponse<object>>.SuccessResponse(response));
             }
             catch (Exception ex)
             {
@@ -145,11 +129,8 @@ namespace FajrSquad.API.Controllers
 
                 if (payload.Type == JTokenType.Array)
                 {
-                    // Validazione: deve essere un array di oggetti
                     if (!payload.All(i => i.Type == JTokenType.Object))
-                    {
                         return BadRequest(ApiResponse<object>.ErrorResponse("Ogni elemento dell'array deve essere un oggetto JSON valido."));
-                    }
 
                     requests = payload.ToObject<List<CreateMotivationRequest>>()!;
                 }
@@ -163,29 +144,26 @@ namespace FajrSquad.API.Controllers
                     return BadRequest(ApiResponse<object>.ErrorResponse("Formato JSON non valido."));
                 }
 
-                // Validazione manuale
+                // Validazione
                 var allErrors = new List<string>();
                 foreach (var r in requests)
                 {
                     var ctx = new ValidationContext(r);
                     var results = new List<ValidationResult>();
                     if (!Validator.TryValidateObject(r, ctx, results, true))
-                    {
                         allErrors.AddRange(results.Select(x => x.ErrorMessage!));
-                    }
                 }
-
                 if (allErrors.Any())
                     return BadRequest(ApiResponse<object>.ValidationErrorResponse(allErrors));
 
-                // Mapping e salvataggio
+                // Mapping e salvataggio (forziamo lingua = it)
                 var entities = requests.Select(r => new Motivation
                 {
                     Text = r.Text,
                     Type = r.Type,
                     Theme = r.Theme,
                     Priority = r.Priority,
-                    Language = r.Language,
+                    Language = DefaultLanguage,
                     Author = r.Author,
                     IsActive = true
                 }).ToList();
@@ -201,6 +179,5 @@ namespace FajrSquad.API.Controllers
                 return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
             }
         }
-
     }
 }
