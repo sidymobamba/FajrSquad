@@ -16,6 +16,7 @@ namespace FajrSquad.Infrastructure.Data
         public DbSet<DailyMessage> DailyMessages => Set<DailyMessage>();
         public DbSet<DeviceToken> DeviceTokens => Set<DeviceToken>();
         public DbSet<ProblemReport> ProblemReports => Set<ProblemReport>();
+        public DbSet<Event> Events { get; set; }
 
         // New DbSets - Spiritual Content
         public DbSet<Hadith> Hadiths => Set<Hadith>();
@@ -37,6 +38,8 @@ namespace FajrSquad.Infrastructure.Data
             modelBuilder.ApplyConfiguration(new MotivationConfiguration());
             modelBuilder.ApplyConfiguration(new ReminderConfiguration());
             modelBuilder.ApplyConfiguration(new UserSettingsConfiguration());
+            modelBuilder.ApplyConfiguration(new EventConfiguration());
+
 
             // Additional configurations for existing entities without dedicated config files
             ConfigureDailyMessage(modelBuilder);
