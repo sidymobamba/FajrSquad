@@ -24,10 +24,10 @@ namespace FajrSquad.Core.Entities
 
         // Language & Localization
         [StringLength(10)]
-        public string Language { get; set; } = "fr"; // fr, ar, en
+        public string Language { get; set; } = "it"; // fr, ar, en
 
         [StringLength(50)]
-        public string Timezone { get; set; } = "Europe/Paris";
+        public string Timezone { get; set; } = "Europe/Italy";
 
         // Privacy Settings
         public bool ShowInLeaderboard { get; set; } = true;

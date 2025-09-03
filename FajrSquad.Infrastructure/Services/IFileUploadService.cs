@@ -1,5 +1,7 @@
+using FajrSquad.Infrastructure.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -18,20 +20,23 @@ namespace FajrSquad.Infrastructure.Services
     {
         private readonly ILogger<FileUploadService> _logger;
         private readonly IHostEnvironment _environment;
+        private readonly IServiceScopeFactory _serviceScopeFactory;
         private readonly string _uploadsPath;
         private readonly string[] _allowedExtensions = { ".jpg", ".jpeg", ".png", ".gif" };
         private readonly long _maxFileSize = 5 * 1024 * 1024; // 5MB
 
-        public FileUploadService(ILogger<FileUploadService> logger, IHostEnvironment environment)
+        public FileUploadService(
+            ILogger<FileUploadService> logger,
+            IHostEnvironment environment,
+            IServiceScopeFactory serviceScopeFactory)
         {
             _logger = logger;
             _environment = environment;
-            
-            // Per IHostEnvironment, usiamo ContentRootPath e creiamo la struttura manualmente
+            _serviceScopeFactory = serviceScopeFactory;
+
+            // Creazione percorso wwwroot/uploads/avatars
             var webRootPath = Path.Combine(_environment.ContentRootPath, "wwwroot");
             _uploadsPath = Path.Combine(webRootPath, "uploads", "avatars");
-            
-            // Crea directory se non esiste (incluso wwwroot)
             Directory.CreateDirectory(_uploadsPath);
         }
 
@@ -40,12 +45,10 @@ namespace FajrSquad.Infrastructure.Services
             try
             {
                 if (!IsValidImageFile(file))
-                {
                     return ServiceResult<string>.ErrorResult("File non valido. Sono supportati solo JPG, PNG, GIF fino a 5MB");
-                }
 
-                // Elimina avatar esistente se presente
-                await DeleteExistingAvatarAsync(userId);
+                // elimina vecchio avatar se presente
+                await DeleteExistingAvatarFileAsync(userId);
 
                 var fileName = $"{userId}_{DateTime.UtcNow:yyyyMMddHHmmss}{Path.GetExtension(file.FileName)}";
                 var filePath = Path.Combine(_uploadsPath, fileName);
@@ -56,7 +59,16 @@ namespace FajrSquad.Infrastructure.Services
                 }
 
                 var avatarUrl = $"/uploads/avatars/{fileName}";
-                _logger.LogInformation("Avatar uploaded successfully for user {UserId}: {FileName}", userId, fileName);
+
+                // 🔑 aggiorna il DB
+                using var scope = _serviceScopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
+                var user = await db.Users.FindAsync(userId);
+                if (user != null)
+                {
+                    user.ProfilePictureUrl = avatarUrl;
+                    await db.SaveChangesAsync();
+                }
 
                 return ServiceResult<string>.SuccessResult(avatarUrl);
             }
@@ -67,18 +79,36 @@ namespace FajrSquad.Infrastructure.Services
             }
         }
 
-        public async Task<ServiceResult<string>> UpdateAvatarAsync(IFormFile file, Guid userId)
+        public Task<ServiceResult<string>> UpdateAvatarAsync(IFormFile file, Guid userId)
         {
-            // Update è uguale a Upload (elimina vecchio e carica nuovo)
-            return await UploadAvatarAsync(file, userId);
+            // Update = stesso comportamento di Upload
+            return UploadAvatarAsync(file, userId);
         }
 
         public async Task<ServiceResult<bool>> DeleteAvatarAsync(Guid userId)
         {
             try
             {
-                var deleted = await DeleteExistingAvatarAsync(userId);
-                return ServiceResult<bool>.SuccessResult(deleted);
+                using var scope = _serviceScopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
+                var user = await db.Users.FindAsync(userId);
+
+                if (user != null && !string.IsNullOrEmpty(user.ProfilePictureUrl))
+                {
+                    // elimina file fisico
+                    var filePath = Path.Combine(_environment.ContentRootPath, "wwwroot", user.ProfilePictureUrl.TrimStart('/'));
+                    if (File.Exists(filePath))
+                    {
+                        File.Delete(filePath);
+                        _logger.LogInformation("Deleted avatar file: {FileName}", filePath);
+                    }
+
+                    // reset campo DB
+                    user.ProfilePictureUrl = null;
+                    await db.SaveChangesAsync();
+                }
+
+                return ServiceResult<bool>.SuccessResult(true);
             }
             catch (Exception ex)
             {
@@ -91,12 +121,13 @@ namespace FajrSquad.Infrastructure.Services
         {
             try
             {
-                var files = Directory.GetFiles(_uploadsPath, $"{userId}_*");
-                if (files.Length > 0)
+                using var scope = _serviceScopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
+                var user = await db.Users.FindAsync(userId);
+
+                if (user != null && !string.IsNullOrEmpty(user.ProfilePictureUrl))
                 {
-                    var fileName = Path.GetFileName(files[0]);
-                    var avatarUrl = $"/uploads/avatars/{fileName}";
-                    return ServiceResult<string>.SuccessResult(avatarUrl);
+                    return ServiceResult<string>.SuccessResult(user.ProfilePictureUrl);
                 }
 
                 return ServiceResult<string>.SuccessResult(string.Empty);
@@ -110,17 +141,15 @@ namespace FajrSquad.Infrastructure.Services
 
         public bool IsValidImageFile(IFormFile file)
         {
-            if (file == null || file.Length == 0)
-                return false;
-
-            if (file.Length > _maxFileSize)
-                return false;
+            if (file == null || file.Length == 0) return false;
+            if (file.Length > _maxFileSize) return false;
 
             var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
             return _allowedExtensions.Contains(extension);
         }
 
-        private Task<bool> DeleteExistingAvatarAsync(Guid userId)
+        // 🔒 elimina solo il file vecchio (senza toccare DB)
+        private Task<bool> DeleteExistingAvatarFileAsync(Guid userId)
         {
             var files = Directory.GetFiles(_uploadsPath, $"{userId}_*");
             foreach (var file in files)

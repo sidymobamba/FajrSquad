@@ -23,7 +23,7 @@ namespace FajrSquad.API.Controllers
         private readonly IMapper _mapper;
 
         public ProfileController(
-            IFileUploadService fileUploadService, 
+            IFileUploadService fileUploadService,
             FajrDbContext context,
             IFajrService fajrService,
             ILogger<ProfileController> logger,
@@ -39,220 +39,144 @@ namespace FajrSquad.API.Controllers
         [HttpPost("upload-avatar")]
         public async Task<IActionResult> UploadAvatar(IFormFile file)
         {
-            try
-            {
-                if (!TryGetUserId(out var userId))
-                    return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
-                var result = await _fileUploadService.UploadAvatarAsync(file, userId);
+            var result = await _fileUploadService.UploadAvatarAsync(file, userId);
 
-                if (!result.Success)
-                    return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
+            if (!result.Success)
+                return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
 
-                return Ok(ApiResponse<string>.SuccessResponse(result.Data!, "Avatar caricato con successo"));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error uploading avatar");
-                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
-            }
+            return Ok(ApiResponse<string>.SuccessResponse(result.Data!, "Avatar caricato con successo"));
         }
 
         [HttpPut("update-avatar")]
         public async Task<IActionResult> UpdateAvatar(IFormFile file)
         {
-            try
-            {
-                if (!TryGetUserId(out var userId))
-                    return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
-                var result = await _fileUploadService.UpdateAvatarAsync(file, userId);
+            var result = await _fileUploadService.UpdateAvatarAsync(file, userId);
 
-                if (!result.Success)
-                    return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
+            if (!result.Success)
+                return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
 
-                return Ok(ApiResponse<string>.SuccessResponse(result.Data!, "Avatar aggiornato con successo"));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error updating avatar");
-                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
-            }
+            return Ok(ApiResponse<string>.SuccessResponse(result.Data!, "Avatar aggiornato con successo"));
         }
 
         [HttpDelete("delete-avatar")]
         public async Task<IActionResult> DeleteAvatar()
         {
-            try
-            {
-                if (!TryGetUserId(out var userId))
-                    return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
-                var result = await _fileUploadService.DeleteAvatarAsync(userId);
+            var result = await _fileUploadService.DeleteAvatarAsync(userId);
 
-                if (!result.Success)
-                    return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
+            if (!result.Success)
+                return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
 
-                return Ok(ApiResponse<bool>.SuccessResponse(result.Data, "Avatar eliminato con successo"));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error deleting avatar");
-                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
-            }
+            return Ok(ApiResponse<bool>.SuccessResponse(result.Data, "Avatar eliminato con successo"));
         }
 
         [HttpGet("avatar")]
         public async Task<IActionResult> GetAvatar()
         {
-            try
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
+
+            return Ok(ApiResponse<object>.SuccessResponse(new
             {
-                if (!TryGetUserId(out var userId))
-                    return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
-
-                var result = await _fileUploadService.GetAvatarUrlAsync(userId);
-
-                if (!result.Success)
-                    return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
-
-                return Ok(ApiResponse<object>.SuccessResponse(new { 
-                    hasAvatar = !string.IsNullOrEmpty(result.Data),
-                    avatarUrl = result.Data 
-                }));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting avatar");
-                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
-            }
+                hasAvatar = !string.IsNullOrEmpty(user.ProfilePictureUrl),
+                avatarUrl = user.ProfilePictureUrl
+            }));
         }
 
         [HttpGet("me")]
         public async Task<IActionResult> GetMyProfile()
         {
-            try
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
+
+            var userSettings = await _context.UserSettings
+                .FirstOrDefaultAsync(s => s.UserId == userId && !s.IsDeleted);
+
+            var statsResult = await _fajrService.GetUserStatsAsync(userId);
+
+            var profileDto = new UserProfileDto
             {
-                if (!TryGetUserId(out var userId))
-                    return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
+                Id = user.Id,
+                Name = user.Name,
+                Email = user.Email,
+                Phone = user.Phone,
+                City = user.City,
+                Role = user.Role,
+                RegisteredAt = user.RegisteredAt,
+                ProfilePictureUrl = user.ProfilePictureUrl,   // ✅ ora leggiamo dal DB
+                HasAvatar = !string.IsNullOrEmpty(user.ProfilePictureUrl),
+                Stats = statsResult.Success ? statsResult.Data : null,
+                Settings = userSettings != null ? _mapper.Map<UserSettingsDto>(userSettings) : null
+            };
 
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
-                if (user == null)
-                    return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
-
-                _logger.LogInformation("👤 Utente trovato: {Name}", user.Name);
-
-                var userSettings = await _context.UserSettings
-                    .FirstOrDefaultAsync(s => s.UserId == userId && !s.IsDeleted);
-                _logger.LogInformation("⚙️  UserSettings trovate: {Found}", userSettings != null);
-
-                var statsResult = await _fajrService.GetUserStatsAsync(userId);
-                _logger.LogInformation("📊 Stats: Success={Success}", statsResult.Success);
-
-                var avatarResult = await _fileUploadService.GetAvatarUrlAsync(userId);
-                _logger.LogInformation("🖼️ Avatar: Success={Success}", avatarResult.Success);
-
-                var profileDto = new UserProfileDto
-                {
-                    Id = user.Id,
-                    Name = user.Name,
-                    Email = user.Email,
-                    Phone = user.Phone,
-                    City = user.City,
-                    Role = user.Role,
-                    RegisteredAt = user.RegisteredAt,
-                    ProfilePictureUrl = avatarResult.Success ? avatarResult.Data : null,
-                    HasAvatar = avatarResult.Success && !string.IsNullOrEmpty(avatarResult.Data),
-                    Stats = statsResult.Success ? statsResult.Data : null,
-                    Settings = userSettings != null ? _mapper.Map<UserSettingsDto>(userSettings) : null
-                };
-
-                return Ok(ApiResponse<UserProfileDto>.SuccessResponse(profileDto));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Errore durante il recupero del profilo");
-                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
-            }
+            return Ok(ApiResponse<UserProfileDto>.SuccessResponse(profileDto));
         }
-
-
 
         [HttpPut("update")]
         public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
         {
-            try
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
+
+            if (!string.IsNullOrWhiteSpace(request.Name))
+                user.Name = request.Name;
+
+            if (!string.IsNullOrWhiteSpace(request.Email))
+                user.Email = request.Email;
+
+            if (!string.IsNullOrWhiteSpace(request.City))
+                user.City = request.City;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(ApiResponse<object>.SuccessResponse(new
             {
-                if (!TryGetUserId(out var userId))
-                    return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
-
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
-                if (user == null)
-                    return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
-
-                // Update user fields
-                if (!string.IsNullOrWhiteSpace(request.Name))
-                    user.Name = request.Name;
-                
-                if (!string.IsNullOrWhiteSpace(request.Email))
-                    user.Email = request.Email;
-                
-                if (!string.IsNullOrWhiteSpace(request.City))
-                    user.City = request.City;
-                
-                // MotivatingBrother will be available after updating User entity
-                // if (!string.IsNullOrWhiteSpace(request.MotivatingBrother))
-                //     user.MotivatingBrother = request.MotivatingBrother;
-
-                // UpdatedAt will be available after updating User entity to inherit from BaseEntity
-                // user.UpdatedAt = DateTime.UtcNow;
-
-                await _context.SaveChangesAsync();
-
-                return Ok(ApiResponse<object>.SuccessResponse(new
-                {
-                    user.Id,
-                    user.Name,
-                    user.Email,
-                    user.City
-                    // MotivatingBrother will be available after updating User entity
-                }, "Profilo aggiornato con successo"));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error updating profile");
-                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
-            }
+                user.Id,
+                user.Name,
+                user.Email,
+                user.City,
+                user.ProfilePictureUrl   // ✅ restituiamo anche l’avatar aggiornato
+            }, "Profilo aggiornato con successo"));
         }
 
         [HttpPost("change-password")]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
         {
-            try
-            {
-                if (!TryGetUserId(out var userId))
-                    return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
-                if (user == null)
-                    return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
 
-                // Verify old password
-                if (!BCrypt.Net.BCrypt.Verify(request.OldPassword, user.PasswordHash))
-                    return BadRequest(ApiResponse<object>.ErrorResponse("Password attuale non corretta"));
+            if (!BCrypt.Net.BCrypt.Verify(request.OldPassword, user.PasswordHash))
+                return BadRequest(ApiResponse<object>.ErrorResponse("Password attuale non corretta"));
 
-                // Update password
-                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-                // user.UpdatedAt = DateTime.UtcNow; // Will be available after updating User entity to inherit from BaseEntity
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
 
-                await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync();
 
-                return Ok(ApiResponse<object>.SuccessResponse(null, "Password cambiata con successo"));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error changing password");
-                return StatusCode(500, ApiResponse<object>.ErrorResponse("Errore interno del server"));
-            }
+            return Ok(ApiResponse<object>.SuccessResponse(null, "Password cambiata con successo"));
         }
 
         [HttpGet("settings")]
@@ -481,11 +405,8 @@ namespace FajrSquad.API.Controllers
         {
             userId = Guid.Empty;
             var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-            
-            if (string.IsNullOrEmpty(userIdClaim))
-                return false;
 
-            return Guid.TryParse(userIdClaim, out userId);
+            return !string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out userId);
         }
     }
 }
