@@ -178,10 +178,13 @@ app.UseMiddleware<FajrSquad.API.Middleware.RateLimitingMiddleware>();
 
 // 🔹 Middleware standard
 app.UseHttpsRedirection();
+var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "uploads", "avatars");
+Directory.CreateDirectory(uploadsPath); // 👈 assicura che esista
+
+app.UseStaticFiles(); // wwwroot standard
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(
-        Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "uploads", "avatars")),
+    FileProvider = new PhysicalFileProvider(uploadsPath),
     RequestPath = "/uploads/avatars"
 });
 app.UseCors("AllowLocalhostFrontend");
