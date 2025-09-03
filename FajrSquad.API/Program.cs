@@ -13,6 +13,7 @@ using Quartz;
 using FajrSquad.API.Jobs;
 using Microsoft.Extensions.DependencyInjection;
 using FajrSquad.Core.Profiles;
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
@@ -177,7 +178,12 @@ app.UseMiddleware<FajrSquad.API.Middleware.RateLimitingMiddleware>();
 
 // 🔹 Middleware standard
 app.UseHttpsRedirection();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(
+        Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "uploads", "avatars")),
+    RequestPath = "/uploads/avatars"
+});
 app.UseCors("AllowLocalhostFrontend");
 app.UseCors(policy => policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin());
 app.UseAuthentication();
