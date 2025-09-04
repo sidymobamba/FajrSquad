@@ -13,22 +13,34 @@ using Quartz;
 using FajrSquad.API.Jobs;
 using Microsoft.Extensions.DependencyInjection;
 using FajrSquad.Core.Profiles;
-using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 var provider = configuration["DatabaseProvider"];
 
-//// 🔹 Firebase Admin SDK (solo per FCM)
-//var json = Environment.GetEnvironmentVariable("FIREBASE_CONFIG_JSON");
+// Stesso per il bucket
+var firebaseBucket = Environment.GetEnvironmentVariable("FIREBASE_STORAGE_BUCKET");
+if (string.IsNullOrWhiteSpace(firebaseBucket))
+{
+    Console.WriteLine("⚠️ FIREBASE_STORAGE_BUCKET is NULL or EMPTY!");
+}
+else
+{
+    Console.WriteLine("✅ FIREBASE_STORAGE_BUCKET: " + firebaseBucket);
+}
+// Debug ENV check (solo per capire se Railway passa le variabili)
+var firebaseJson = Environment.GetEnvironmentVariable("FIREBASE_CONFIG_JSON");
+if (string.IsNullOrWhiteSpace(firebaseJson))
+{
+    Console.WriteLine("⚠️ FIREBASE_CONFIG_JSON is NULL or EMPTY!");
+}
+else
+{
+    Console.WriteLine("✅ FIREBASE_CONFIG_JSON loaded. Length: " + firebaseJson.Length);
+}
 
-//if (string.IsNullOrWhiteSpace(json))
-//    throw new InvalidOperationException("FIREBASE_CONFIG_JSON environment variable is not set.");
 
-//FirebaseApp.Create(new AppOptions()
-//{
-//    Credential = GoogleCredential.FromJson(json)
-//});
+
 
 
 // 🔹 Database (SQL Server o PostgreSQL)
@@ -139,15 +151,13 @@ builder.Services.AddControllers()
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     })
-    .AddNewtonsoftJson(); // Per JObject
+    .AddNewtonsoftJson();
 
 // 🔹 Extra services
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddHealthChecks();
-builder.Services.Configure<StaticFileOptions>(options => options.ServeUnknownFileTypes = false);
-builder.Services.AddAutoMapper(typeof(FajrProfile)); // Scansiona tutti i profili nell’assembly
-
+builder.Services.AddAutoMapper(typeof(FajrProfile));
 
 // 🔹 Logging
 builder.Logging.ClearProviders();
@@ -168,8 +178,8 @@ if (app.Environment.IsDevelopment())
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
-    // db.Database.Migrate(); // attiva se vuoi migrazioni automatiche
-    // await IslamicDataSeeder.SeedAsync(db); // se usi seeder
+    // db.Database.Migrate();
+    // await IslamicDataSeeder.SeedAsync(db);
 }
 
 // 🔹 Middleware personalizzati
@@ -178,15 +188,10 @@ app.UseMiddleware<FajrSquad.API.Middleware.RateLimitingMiddleware>();
 
 // 🔹 Middleware standard
 app.UseHttpsRedirection();
-var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "uploads", "avatars");
-Directory.CreateDirectory(uploadsPath); // 👈 assicura che esista
 
-app.UseStaticFiles(); // wwwroot standard
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(uploadsPath),
-    RequestPath = "/uploads/avatars"
-});
+// ❌ NON serve più app.UseStaticFiles() per avatars (usa Firebase)
+app.UseStaticFiles(); // solo per wwwroot standard, es. js/css se li hai
+
 app.UseCors("AllowLocalhostFrontend");
 app.UseCors(policy => policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin());
 app.UseAuthentication();

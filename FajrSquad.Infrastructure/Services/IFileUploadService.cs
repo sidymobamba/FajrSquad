@@ -1,8 +1,8 @@
 using FajrSquad.Infrastructure.Data;
-using Microsoft.AspNetCore.Hosting;
+using Google.Apis.Auth.OAuth2;
+using Google.Cloud.Storage.V1;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace FajrSquad.Infrastructure.Services
@@ -19,25 +19,25 @@ namespace FajrSquad.Infrastructure.Services
     public class FileUploadService : IFileUploadService
     {
         private readonly ILogger<FileUploadService> _logger;
-        private readonly IHostEnvironment _environment;
         private readonly IServiceScopeFactory _serviceScopeFactory;
-        private readonly string _uploadsPath;
+        private readonly StorageClient _storageClient;
+        private readonly string _bucket;
         private readonly string[] _allowedExtensions = { ".jpg", ".jpeg", ".png", ".gif" };
         private readonly long _maxFileSize = 5 * 1024 * 1024; // 5MB
 
-        public FileUploadService(
-            ILogger<FileUploadService> logger,
-            IHostEnvironment environment,
-            IServiceScopeFactory serviceScopeFactory)
+        public FileUploadService(ILogger<FileUploadService> logger, IServiceScopeFactory serviceScopeFactory)
         {
             _logger = logger;
-            _environment = environment;
             _serviceScopeFactory = serviceScopeFactory;
 
-            // Creazione percorso wwwroot/uploads/avatars
-            var webRootPath = Path.Combine(_environment.ContentRootPath, "wwwroot");
-            _uploadsPath = Path.Combine(webRootPath, "uploads", "avatars");
-            Directory.CreateDirectory(_uploadsPath);
+            _bucket = Environment.GetEnvironmentVariable("FIREBASE_STORAGE_BUCKET")
+                      ?? throw new InvalidOperationException("FIREBASE_STORAGE_BUCKET not set");
+
+            var firebaseJson = Environment.GetEnvironmentVariable("FIREBASE_CONFIG_JSON")
+                               ?? throw new InvalidOperationException("FIREBASE_CONFIG_JSON not set");
+
+            var credential = GoogleCredential.FromJson(firebaseJson);
+            _storageClient = StorageClient.Create(credential);
         }
 
         public async Task<ServiceResult<string>> UploadAvatarAsync(IFormFile file, Guid userId)
@@ -47,20 +47,18 @@ namespace FajrSquad.Infrastructure.Services
                 if (!IsValidImageFile(file))
                     return ServiceResult<string>.ErrorResult("File non valido. Sono supportati solo JPG, PNG, GIF fino a 5MB");
 
-                // elimina vecchio avatar se presente
-                await DeleteExistingAvatarFileAsync(userId);
+                // elimina eventuale avatar precedente
+                await DeleteAvatarAsync(userId);
 
-                var fileName = $"{userId}_{DateTime.UtcNow:yyyyMMddHHmmss}{Path.GetExtension(file.FileName)}";
-                var filePath = Path.Combine(_uploadsPath, fileName);
+                var fileName = $"avatars/{userId}_{DateTime.UtcNow:yyyyMMddHHmmss}{Path.GetExtension(file.FileName)}";
 
-                using (var stream = new FileStream(filePath, FileMode.Create))
-                {
-                    await file.CopyToAsync(stream);
-                }
+                using var stream = file.OpenReadStream();
+                await _storageClient.UploadObjectAsync(_bucket, fileName, file.ContentType, stream);
 
-                var avatarUrl = $"/uploads/avatars/{fileName}";
+                // URL pubblico
+                var avatarUrl = $"https://firebasestorage.googleapis.com/v0/b/{_bucket}/o/{Uri.EscapeDataString(fileName)}?alt=media";
 
-                // 🔑 aggiorna il DB
+                // aggiorna DB
                 using var scope = _serviceScopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
                 var user = await db.Users.FindAsync(userId);
@@ -81,7 +79,6 @@ namespace FajrSquad.Infrastructure.Services
 
         public Task<ServiceResult<string>> UpdateAvatarAsync(IFormFile file, Guid userId)
         {
-            // Update = stesso comportamento di Upload
             return UploadAvatarAsync(file, userId);
         }
 
@@ -95,15 +92,15 @@ namespace FajrSquad.Infrastructure.Services
 
                 if (user != null && !string.IsNullOrEmpty(user.ProfilePictureUrl))
                 {
-                    // elimina file fisico
-                    var filePath = Path.Combine(_environment.ContentRootPath, "wwwroot", user.ProfilePictureUrl.TrimStart('/'));
-                    if (File.Exists(filePath))
+                    // Ricava il path relativo da Firebase URL
+                    var fileName = ExtractObjectNameFromUrl(user.ProfilePictureUrl);
+
+                    if (!string.IsNullOrEmpty(fileName))
                     {
-                        File.Delete(filePath);
-                        _logger.LogInformation("Deleted avatar file: {FileName}", filePath);
+                        await _storageClient.DeleteObjectAsync(_bucket, fileName);
+                        _logger.LogInformation("Deleted avatar from Firebase: {FileName}", fileName);
                     }
 
-                    // reset campo DB
                     user.ProfilePictureUrl = null;
                     await db.SaveChangesAsync();
                 }
@@ -148,16 +145,19 @@ namespace FajrSquad.Infrastructure.Services
             return _allowedExtensions.Contains(extension);
         }
 
-        // 🔒 elimina solo il file vecchio (senza toccare DB)
-        private Task<bool> DeleteExistingAvatarFileAsync(Guid userId)
+        private string ExtractObjectNameFromUrl(string url)
         {
-            var files = Directory.GetFiles(_uploadsPath, $"{userId}_*");
-            foreach (var file in files)
+            try
             {
-                File.Delete(file);
-                _logger.LogInformation("Deleted existing avatar: {FileName}", Path.GetFileName(file));
+                var start = url.IndexOf("/o/") + 3;
+                var end = url.IndexOf("?alt=");
+                var encoded = url[start..end];
+                return Uri.UnescapeDataString(encoded);
             }
-            return Task.FromResult(files.Length > 0);
+            catch
+            {
+                return string.Empty;
+            }
         }
     }
 }
