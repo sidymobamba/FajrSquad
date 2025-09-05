@@ -201,9 +201,7 @@ app.UseHttpsRedirection();
 
 // ❌ NON serve più app.UseStaticFiles() per avatars (usa Firebase)
 app.UseStaticFiles(); // solo per wwwroot standard, es. js/css se li hai
-
-app.UseCors("AllowLocalhostFrontend");
-app.UseCors(policy => policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin());
+app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
