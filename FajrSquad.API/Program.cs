@@ -197,8 +197,8 @@ app.UseHttpsRedirection();
 app.UseStaticFiles(); // solo per wwwroot standard, es. js/css se li hai
 app.UseCors("AllowFrontend");
 // 🔹 Middleware personalizzati
-app.UseMiddleware<FajrSquad.API.Middleware.GlobalExceptionMiddleware>();
-app.UseMiddleware<FajrSquad.API.Middleware.RateLimitingMiddleware>();
+//app.UseMiddleware<FajrSquad.API.Middleware.GlobalExceptionMiddleware>();
+//app.UseMiddleware<FajrSquad.API.Middleware.RateLimitingMiddleware>();
 
 // 🔹 Middleware standard
 
