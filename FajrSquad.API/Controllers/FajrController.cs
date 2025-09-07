@@ -18,6 +18,9 @@ namespace FajrSquad.API.Controllers
         private readonly IFajrService _fajrService;
         private readonly ILogger<FajrController> _logger;
 
+        // 🔹 per ora fisso, puoi sostituire con TimeZone preso da User
+        private const string DefaultTimeZone = "Europe/Rome"; // oppure "Africa/Dakar"
+
         public FajrController(FajrDbContext db, IFajrService fajrService, ILogger<FajrController> logger)
         {
             _db = db;
@@ -25,6 +28,9 @@ namespace FajrSquad.API.Controllers
             _logger = logger;
         }
 
+        // ----------------------------------------------------
+        // 🔹 Check-In
+        // ----------------------------------------------------
         [Authorize]
         [HttpPost("checkin")]
         public async Task<IActionResult> CheckIn(CheckInRequest request)
@@ -40,7 +46,7 @@ namespace FajrSquad.API.Controllers
                 {
                     if (result.ValidationErrors.Any())
                         return BadRequest(ApiResponse<object>.ValidationErrorResponse(result.ValidationErrors));
-                    
+
                     return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
                 }
 
@@ -53,10 +59,9 @@ namespace FajrSquad.API.Controllers
             }
         }
 
-
-
-
-
+        // ----------------------------------------------------
+        // 🔹 User Stats
+        // ----------------------------------------------------
         [Authorize]
         [HttpGet("user-stats")]
         public async Task<IActionResult> GetUserStats()
@@ -80,6 +85,9 @@ namespace FajrSquad.API.Controllers
             }
         }
 
+        // ----------------------------------------------------
+        // 🔹 My History
+        // ----------------------------------------------------
         [Authorize]
         [HttpGet("my-history")]
         public async Task<IActionResult> GetMyHistory([FromQuery] int page = 1, [FromQuery] int pageSize = 30)
@@ -94,7 +102,6 @@ namespace FajrSquad.API.Controllers
                 if (!result.Success)
                     return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
 
-                // Apply pagination
                 var totalCount = result.Data!.Count;
                 var paginatedItems = result.Data!
                     .Skip((page - 1) * pageSize)
@@ -118,6 +125,9 @@ namespace FajrSquad.API.Controllers
             }
         }
 
+        // ----------------------------------------------------
+        // 🔹 Streak
+        // ----------------------------------------------------
         [Authorize]
         [HttpGet("fajr-streak")]
         public async Task<IActionResult> GetFajrStreak()
@@ -141,6 +151,9 @@ namespace FajrSquad.API.Controllers
             }
         }
 
+        // ----------------------------------------------------
+        // 🔹 Has Checked In Today
+        // ----------------------------------------------------
         [Authorize]
         [HttpGet("has-checked-in")]
         public async Task<IActionResult> HasCheckedInToday()
@@ -150,7 +163,9 @@ namespace FajrSquad.API.Controllers
                 if (!TryGetUserId(out var userId))
                     return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
-                var result = await _fajrService.HasCheckedInTodayAsync(userId);
+                var today = GetUserToday();
+
+                var result = await _fajrService.HasCheckedInTodayAsync(userId, today);
 
                 if (!result.Success)
                     return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
@@ -164,12 +179,15 @@ namespace FajrSquad.API.Controllers
             }
         }
 
+        // ----------------------------------------------------
+        // 🔹 Daily Leaderboard
+        // ----------------------------------------------------
         [HttpGet("leaderboard/daily")]
         public async Task<IActionResult> GetDailyLeaderboard([FromQuery] int limit = 10)
         {
             try
             {
-                var today = DateTime.UtcNow.Date;
+                var today = GetUserToday();
 
                 var leaderboard = await _db.FajrCheckIns
                     .Where(f => f.Date == today)
@@ -197,15 +215,19 @@ namespace FajrSquad.API.Controllers
             }
         }
 
+        // ----------------------------------------------------
+        // 🔹 Weekly Leaderboard
+        // ----------------------------------------------------
         [HttpGet("leaderboard/weekly")]
         public async Task<IActionResult> GetWeeklyLeaderboard([FromQuery] int limit = 10)
         {
             try
             {
-                var startOfWeek = DateTime.UtcNow.Date.AddDays(-(int)DateTime.UtcNow.DayOfWeek);
+                var today = GetUserToday();
+                var startOfWeek = today.AddDays(-(int)today.DayOfWeek + 1); // lunedì
 
                 var leaderboard = await _db.FajrCheckIns
-                    .Where(f => f.Date >= startOfWeek)
+                    .Where(f => f.Date >= startOfWeek && f.Date <= today)
                     .Include(f => f.User)
                     .GroupBy(f => f.UserId)
                     .Select(g => new LeaderboardEntry
@@ -220,7 +242,6 @@ namespace FajrSquad.API.Controllers
                     .Take(limit)
                     .ToListAsync();
 
-                // Add ranking
                 for (int i = 0; i < leaderboard.Count; i++)
                 {
                     leaderboard[i].Rank = i + 1;
@@ -235,12 +256,15 @@ namespace FajrSquad.API.Controllers
             }
         }
 
+        // ----------------------------------------------------
+        // 🔹 Today Status
+        // ----------------------------------------------------
         [HttpGet("today-status")]
         public async Task<IActionResult> TodayStatus()
         {
             try
             {
-                var today = DateTime.UtcNow.Date;
+                var today = GetUserToday();
 
                 var todayStatus = await _db.FajrCheckIns
                     .Include(f => f.User)
@@ -264,22 +288,26 @@ namespace FajrSquad.API.Controllers
             }
         }
 
+        // ----------------------------------------------------
+        // 🔹 Missed Check-In
+        // ----------------------------------------------------
         [Authorize(Roles = "Admin")]
         [HttpGet("missed-checkin")]
         public async Task<IActionResult> MissedCheckIn()
         {
             try
             {
-                var today = DateTime.UtcNow.Date;
-                
+                var today = GetUserToday();
+
                 var missedUsers = await _db.Users
                     .Where(u => !_db.FajrCheckIns.Any(f => f.UserId == u.Id && f.Date == today))
                     .Select(u => new { u.Name, u.City, u.Phone })
                     .ToListAsync();
 
-                return Ok(ApiResponse<object>.SuccessResponse(new { 
-                    count = missedUsers.Count, 
-                    users = missedUsers 
+                return Ok(ApiResponse<object>.SuccessResponse(new
+                {
+                    count = missedUsers.Count,
+                    users = missedUsers
                 }));
             }
             catch (Exception ex)
@@ -289,15 +317,24 @@ namespace FajrSquad.API.Controllers
             }
         }
 
+        // ----------------------------------------------------
+        // 🔹 Helpers
+        // ----------------------------------------------------
         private bool TryGetUserId(out Guid userId)
         {
             userId = Guid.Empty;
             var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-            
+
             if (string.IsNullOrEmpty(userIdClaim))
                 return false;
 
             return Guid.TryParse(userIdClaim, out userId);
+        }
+
+        private DateTime GetUserToday()
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(DefaultTimeZone);
+            return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).Date;
         }
     }
 }

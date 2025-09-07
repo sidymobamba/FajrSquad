@@ -154,22 +154,22 @@ namespace FajrSquad.Infrastructure.Services
             }
         }
 
-        public async Task<ServiceResult<bool>> HasCheckedInTodayAsync(Guid userId)
+        public async Task<ServiceResult<bool>> HasCheckedInTodayAsync(Guid userId, DateTime today)
         {
             try
             {
-                var today = DateTime.UtcNow.Date;
-                var hasCheckedIn = await _context.FajrCheckIns
-                    .AnyAsync(c => c.UserId == userId && c.Date == today);
+                var hasCheckIn = await _context.FajrCheckIns
+                    .AnyAsync(f => f.UserId == userId && f.Date == today);
 
-                return ServiceResult<bool>.SuccessResult(hasCheckedIn);
+                return ServiceResult<bool>.SuccessResult(hasCheckIn);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error checking today's check-in for {UserId}", userId);
-                return ServiceResult<bool>.ErrorResult("Errore nella verifica del check-in");
+                _logger.LogError(ex, "Error checking today's check-in");
+                return ServiceResult<bool>.ErrorResult("Errore durante il controllo del check-in odierno");
             }
         }
+
 
         public async Task<ServiceResult<List<CheckInHistoryDto>>> GetHistoryAsync(Guid userId)
         {
