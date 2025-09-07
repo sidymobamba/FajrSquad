@@ -3,45 +3,31 @@ using System.Text.Json.Serialization;
 using FajrSquad.Core.Config;
 using FajrSquad.Infrastructure.Data;
 using FajrSquad.Infrastructure.Services;
-using FirebaseAdmin;
+using FajrSquad.API.Jobs;
+using FajrSquad.Core.Profiles;
 using Google.Apis.Auth.OAuth2;
+using FirebaseAdmin;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Quartz;
-using FajrSquad.API.Jobs;
-using Microsoft.Extensions.DependencyInjection;
-using FajrSquad.Core.Profiles;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 var provider = configuration["DatabaseProvider"];
 
-// Stesso per il bucket
+// 🔹 Log env utili (Firebase)
 var firebaseBucket = Environment.GetEnvironmentVariable("FIREBASE_STORAGE_BUCKET");
-if (string.IsNullOrWhiteSpace(firebaseBucket))
-{
-    Console.WriteLine("⚠️ FIREBASE_STORAGE_BUCKET is NULL or EMPTY!");
-}
-else
-{
-    Console.WriteLine("✅ FIREBASE_STORAGE_BUCKET: " + firebaseBucket);
-}
-// Debug ENV check (solo per capire se Railway passa le variabili)
+Console.WriteLine(string.IsNullOrWhiteSpace(firebaseBucket)
+    ? "⚠️ FIREBASE_STORAGE_BUCKET is NULL or EMPTY!"
+    : "✅ FIREBASE_STORAGE_BUCKET: " + firebaseBucket);
+
 var firebaseJson = Environment.GetEnvironmentVariable("FIREBASE_CONFIG_JSON");
-if (string.IsNullOrWhiteSpace(firebaseJson))
-{
-    Console.WriteLine("⚠️ FIREBASE_CONFIG_JSON is NULL or EMPTY!");
-}
-else
-{
-    Console.WriteLine("✅ FIREBASE_CONFIG_JSON loaded. Length: " + firebaseJson.Length);
-}
-
-
-
-
+Console.WriteLine(string.IsNullOrWhiteSpace(firebaseJson)
+    ? "⚠️ FIREBASE_CONFIG_JSON is NULL or EMPTY!"
+    : "✅ FIREBASE_CONFIG_JSON loaded. Length: " + firebaseJson.Length);
 
 // 🔹 Database (SQL Server o PostgreSQL)
 builder.Services.AddDbContext<FajrDbContext>(options =>
@@ -53,14 +39,14 @@ builder.Services.AddDbContext<FajrDbContext>(options =>
         options.UseSqlServer(cs);
 });
 
-// 🔹 Dependency Injection
+// 🔹 DI
 builder.Services.AddScoped<IFajrService, FajrService>();
 builder.Services.AddScoped<IFileUploadService, FileUploadService>();
 builder.Services.AddScoped<ICacheService, MemoryCacheService>();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<NotificationService>();
 
-// 🔹 Quartz Jobs (notifiche programmate)
+// 🔹 Quartz
 builder.Services.AddQuartz(q =>
 {
     q.UseMicrosoftDependencyInjectionJobFactory();
@@ -83,43 +69,43 @@ builder.Services.AddQuartz(q =>
 });
 builder.Services.AddQuartzHostedService();
 
-// 🔹 JWT Auth
+// 🔹 JWT
 builder.Services.Configure<JwtSettings>(configuration.GetSection("Jwt"));
-
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    var jwtSettings = configuration.GetSection("Jwt").Get<JwtSettings>()!;
-    options.TokenValidationParameters = new TokenValidationParameters
+builder.Services
+    .AddAuthentication(options =>
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings.Issuer,
-        ValidAudience = jwtSettings.Audience,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Secret))
-    };
-    options.Events = new JwtBearerEvents
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
     {
-        OnAuthenticationFailed = context =>
+        var jwtSettings = configuration.GetSection("Jwt").Get<JwtSettings>()!;
+        options.TokenValidationParameters = new TokenValidationParameters
         {
-            Console.WriteLine("Authentication failed: " + context.Exception.Message);
-            return Task.CompletedTask;
-        },
-        OnTokenValidated = context =>
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSettings.Issuer,
+            ValidAudience = jwtSettings.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Secret))
+        };
+        options.Events = new JwtBearerEvents
         {
-            Console.WriteLine("Token validato correttamente.");
-            return Task.CompletedTask;
-        }
-    };
-});
+            OnAuthenticationFailed = ctx =>
+            {
+                Console.WriteLine("Authentication failed: " + ctx.Exception.Message);
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = ctx =>
+            {
+                Console.WriteLine("Token validato correttamente.");
+                return Task.CompletedTask;
+            }
+        };
+    });
 
-// 🔹 Swagger + Auth support
+// 🔹 Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -145,7 +131,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// 🔹 Controllers (System.Text.Json + Newtonsoft support)
+// 🔹 Controllers
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -153,7 +139,7 @@ builder.Services.AddControllers()
     })
     .AddNewtonsoftJson();
 
-// 🔹 Extra services
+// 🔹 Extra
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddHealthChecks();
@@ -163,17 +149,34 @@ builder.Services.AddAutoMapper(typeof(FajrProfile));
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
-// Add CORS
+
+// 🔹 CORS
+// Leggi origini da env CORS_ORIGINS (separate da virgola) oppure usa default
+var originsFromEnv = Environment.GetEnvironmentVariable("CORS_ORIGINS");
+string[] allowedOrigins = !string.IsNullOrWhiteSpace(originsFromEnv)
+    ? originsFromEnv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    : new[]
+    {
+        "http://localhost:8100",
+        "http://localhost:4200",
+        "capacitor://localhost",
+        "ionic://localhost"
+        // aggiungi qui il dominio web se lo hai (es: https://app.tuodominio.com)
+    };
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowFrontend",
-        policy =>
-        {
-            policy.WithOrigins("http://localhost:8100")
-                  .AllowAnyHeader()
-                  .AllowAnyMethod();
-        });
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              // se usi cookie (non necessario per header Authorization):
+              //.AllowCredentials()
+              ;
+    });
 });
+
 var app = builder.Build();
 
 // 🔹 Dev tools
@@ -184,28 +187,71 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// 🔹 DB seeding (facoltativo)
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
-    // db.Database.Migrate();
-    // await IslamicDataSeeder.SeedAsync(db);
-}
+// ✅ ORDINE CORRETTO PIPELINE
 app.UseHttpsRedirection();
 
-// ❌ NON serve più app.UseStaticFiles() per avatars (usa Firebase)
-app.UseStaticFiles(); // solo per wwwroot standard, es. js/css se li hai
+// 1) Routing
+app.UseRouting();
+
+// 2) CORS (prima di auth/authorization)
 app.UseCors("AllowFrontend");
-// 🔹 Middleware personalizzati
-//app.UseMiddleware<FajrSquad.API.Middleware.GlobalExceptionMiddleware>();
-//app.UseMiddleware<FajrSquad.API.Middleware.RateLimitingMiddleware>();
 
-// 🔹 Middleware standard
+// 2b) Fallback per preflight OPTIONS (utile se qualche proxy “mangia” il preflight)
+app.Use(async (ctx, next) =>
+{
+    if (HttpMethods.Options.Equals(ctx.Request.Method, StringComparison.OrdinalIgnoreCase))
+    {
+        // Lascia a CORS middleware la priorità, ma se nessuno risponde, rispondiamo noi
+        if (!ctx.Response.Headers.ContainsKey("Access-Control-Allow-Origin"))
+        {
+            var origin = ctx.Request.Headers["Origin"].ToString();
+            if (!string.IsNullOrEmpty(origin))
+            {
+                ctx.Response.Headers["Access-Control-Allow-Origin"] = origin;
+                ctx.Response.Headers["Vary"] = "Origin";
+            }
+            var reqHeaders = ctx.Request.Headers["Access-Control-Request-Headers"].ToString();
+            var reqMethod = ctx.Request.Headers["Access-Control-Request-Method"].ToString();
+            if (!string.IsNullOrEmpty(reqHeaders))
+                ctx.Response.Headers["Access-Control-Allow-Headers"] = reqHeaders;
+            if (!string.IsNullOrEmpty(reqMethod))
+                ctx.Response.Headers["Access-Control-Allow-Methods"] = reqMethod;
+        }
+        ctx.Response.StatusCode = StatusCodes.Status204NoContent;
+        return;
+    }
+    await next();
+});
 
+// 3) Static files (ok lasciarlo qui)
+app.UseStaticFiles();
+
+// 4) Auth
 app.UseAuthentication();
 app.UseAuthorization();
 
-// 🔹 Routing
+// 5) Global exception wrapper per mantenere CORS anche sui 500
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"❌ Unhandled exception: {ex}");
+        var origin = context.Request.Headers["Origin"].ToString();
+        if (!string.IsNullOrEmpty(origin))
+        {
+            context.Response.Headers["Access-Control-Allow-Origin"] = origin;
+            context.Response.Headers["Vary"] = "Origin";
+        }
+        context.Response.StatusCode = 500;
+        await context.Response.WriteAsJsonAsync(new { error = "Internal Server Error" });
+    }
+});
+
+// 6) Endpoints
 app.MapControllers();
 app.MapHealthChecks("/health");
 

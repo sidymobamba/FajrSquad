@@ -124,13 +124,19 @@ namespace FajrSquad.API.Controllers
             }
         }
 
-        [Authorize]
         [HttpGet("week")]
-        public async Task<IActionResult> GetPrayerTimesWeek([FromQuery] string country = "Italy")
+        [AllowAnonymous] // 👉 così puoi testare senza token. Quando hai auth pronta rimetti [Authorize].
+        public async Task<IActionResult> GetPrayerTimesWeek([FromQuery] string country = "Italy", [FromQuery] string? cityOverride = null)
         {
-            var city = User.FindFirstValue("city");
-            if (string.IsNullOrWhiteSpace(city))
-                return BadRequest(new { error = "City not found" });
+            // Se il JWT ha la claim "city", usala
+            var cityFromToken = User?.FindFirstValue("city");
+
+            // Fallback: se non c’è nel token, prova querystring, se no default
+            var city = !string.IsNullOrWhiteSpace(cityFromToken)
+                ? cityFromToken
+                : !string.IsNullOrWhiteSpace(cityOverride)
+                    ? cityOverride
+                    : "Brescia"; // fallback di default
 
             var today = DateTime.UtcNow.Date;
             var results = new List<object>();
@@ -139,14 +145,25 @@ namespace FajrSquad.API.Controllers
             {
                 var date = today.AddDays(i).ToString("dd-MM-yyyy");
                 var url = $"https://api.aladhan.com/v1/timingsByCity?city={city}&country={country}&method=2&date={date}";
-                var response = await _httpClient.GetStringAsync(url);
-                var json = JObject.Parse(response);
-                var fajr = json["data"]?["timings"]?["Fajr"]?.ToString();
-                results.Add(new { date, fajr });
+
+                try
+                {
+                    var response = await _httpClient.GetStringAsync(url);
+                    var json = JObject.Parse(response);
+                    var fajr = json["data"]?["timings"]?["Fajr"]?.ToString();
+                    results.Add(new { date, fajr });
+                }
+                catch (Exception ex)
+                {
+                    // fallback: se l’API esterna rompe, metti null
+                    Console.WriteLine($"Errore API Aladhan {date}: {ex.Message}");
+                    results.Add(new { date, fajr = (string?)null });
+                }
             }
 
             return Ok(new { city, week = results });
         }
+
 
 
     }
