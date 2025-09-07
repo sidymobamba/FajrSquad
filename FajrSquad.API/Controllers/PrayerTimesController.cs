@@ -124,5 +124,30 @@ namespace FajrSquad.API.Controllers
             }
         }
 
+        [Authorize]
+        [HttpGet("week")]
+        public async Task<IActionResult> GetPrayerTimesWeek([FromQuery] string country = "Italy")
+        {
+            var city = User.FindFirstValue("city");
+            if (string.IsNullOrWhiteSpace(city))
+                return BadRequest(new { error = "City not found" });
+
+            var today = DateTime.UtcNow.Date;
+            var results = new List<object>();
+
+            for (int i = 0; i < 7; i++)
+            {
+                var date = today.AddDays(i).ToString("dd-MM-yyyy");
+                var url = $"https://api.aladhan.com/v1/timingsByCity?city={city}&country={country}&method=2&date={date}";
+                var response = await _httpClient.GetStringAsync(url);
+                var json = JObject.Parse(response);
+                var fajr = json["data"]?["timings"]?["Fajr"]?.ToString();
+                results.Add(new { date, fajr });
+            }
+
+            return Ok(new { city, week = results });
+        }
+
+
     }
 }
