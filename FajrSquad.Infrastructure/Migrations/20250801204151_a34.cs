@@ -114,7 +114,7 @@ namespace FajrSquad.Infrastructure.Migrations
                     MotivatingBrother = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     FajrStreak = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
                     RegisteredAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
-                    ProfilePictureUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    ProfilePicture = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     IsDeleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),

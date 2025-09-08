@@ -593,7 +593,7 @@ namespace FajrSquad.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
-                    b.Property<string>("ProfilePictureUrl")
+                    b.Property<string>("ProfilePicture")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 

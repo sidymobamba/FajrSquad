@@ -84,7 +84,7 @@ namespace FajrSquad.Infrastructure.Services
                 var user = await db.Users.FindAsync(userId);
                 if (user != null)
                 {
-                    user.ProfilePictureUrl = publicUrl;
+                    user.ProfilePicture = publicUrl;
                     await db.SaveChangesAsync();
                 }
 
@@ -112,11 +112,11 @@ namespace FajrSquad.Infrastructure.Services
                 var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
                 var user = await db.Users.FindAsync(userId);
 
-                if (user != null && !string.IsNullOrEmpty(user.ProfilePictureUrl))
+                if (user != null && !string.IsNullOrEmpty(user.ProfilePicture))
                 {
-                    var key = user.ProfilePictureUrl.Replace(_publicBaseUrl + "/", "");
+                    var key = user.ProfilePicture.Replace(_publicBaseUrl + "/", "");
                     await _s3.DeleteObjectAsync(_bucket, key);
-                    user.ProfilePictureUrl = null;
+                    user.ProfilePicture = null;
                     await db.SaveChangesAsync();
                 }
 
@@ -134,7 +134,7 @@ namespace FajrSquad.Infrastructure.Services
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
             var user = await db.Users.FindAsync(userId);
-            return ServiceResult<string>.SuccessResult(user?.ProfilePictureUrl ?? string.Empty, "Avatar recuperato");
+            return ServiceResult<string>.SuccessResult(user?.ProfilePicture ?? string.Empty, "Avatar recuperato");
         }
 
         public bool IsValidImageFile(IFormFile file)
