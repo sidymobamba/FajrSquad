@@ -35,6 +35,7 @@ namespace FajrSquad.Core.Entities
         public DateTime RegisteredAt { get; set; } = DateTime.UtcNow;
 
         // Profile Picture
+        [StringLength(500)]
         public string? ProfilePicture { get; set; }
 
         // Navigation Properties

@@ -37,7 +37,7 @@ namespace FajrSquad.API.Controllers
                 Phone = request.Phone,
                 City = request.City,
                 PasswordHash = hashedPassword,
-                Role = request.Role ?? "User"
+                Role = "User"
             };
 
             _db.Users.Add(user);

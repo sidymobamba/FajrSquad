@@ -31,8 +31,6 @@ namespace FajrSquad.Core.DTOs
         [Required(ErrorMessage = "La password è obbligatoria")]
         [StringLength(100, MinimumLength = 6, ErrorMessage = "La password deve essere almeno di 6 caratteri")]
         public string Password { get; set; } = string.Empty;
-
-        public string? Role { get; set; }
     }
 
     public class RegisterWithOtpRequest
