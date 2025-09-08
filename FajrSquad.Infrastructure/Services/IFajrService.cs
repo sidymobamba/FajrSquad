@@ -19,14 +19,30 @@ namespace FajrSquad.Infrastructure.Services
     {
         public bool Success { get; set; }
         public T? Data { get; set; }
+        public string Message { get; set; }
         public string? ErrorMessage { get; set; }
+        public IEnumerable<string> Errors { get; set; }
         public List<string> ValidationErrors { get; set; } = new();
 
         public static ServiceResult<T> SuccessResult(T data)
-            => new() { Success = true, Data = data };
+        {
+            return new ServiceResult<T> { Success = true, Data = data };
+        }
+
+        // 🔹 Nuovo overload con messaggio
+        public static ServiceResult<T> SuccessResult(T data, string message)
+        {
+            return new ServiceResult<T> { Success = true, Data = data, Message = message };
+        }
 
         public static ServiceResult<T> ErrorResult(string error)
-            => new() { Success = false, ErrorMessage = error };
+        {
+            return new ServiceResult<T>
+            {
+                Success = false,
+                Errors = new[] { error }
+            };
+        }
 
         public static ServiceResult<T> ValidationErrorResult(List<string> errors)
             => new() { Success = false, ValidationErrors = errors };

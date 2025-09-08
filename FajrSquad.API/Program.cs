@@ -5,29 +5,28 @@ using FajrSquad.Infrastructure.Data;
 using FajrSquad.Infrastructure.Services;
 using FajrSquad.API.Jobs;
 using FajrSquad.Core.Profiles;
-using Google.Apis.Auth.OAuth2;
-using FirebaseAdmin;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Quartz;
+using DotNetEnv; // 👈 aggiunto
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 var provider = configuration["DatabaseProvider"];
 
-// 🔹 Log env utili (Firebase)
-var firebaseBucket = Environment.GetEnvironmentVariable("FIREBASE_STORAGE_BUCKET");
-Console.WriteLine(string.IsNullOrWhiteSpace(firebaseBucket)
-    ? "⚠️ FIREBASE_STORAGE_BUCKET is NULL or EMPTY!"
-    : "✅ FIREBASE_STORAGE_BUCKET: " + firebaseBucket);
+// 🔹 Carica .env SOLO in Development
+if (builder.Environment.IsDevelopment())
+{
+    DotNetEnv.Env.Load();
+    Console.WriteLine("✅ .env file loaded in Development");
+}
 
-var firebaseJson = Environment.GetEnvironmentVariable("FIREBASE_CONFIG_JSON");
-Console.WriteLine(string.IsNullOrWhiteSpace(firebaseJson)
-    ? "⚠️ FIREBASE_CONFIG_JSON is NULL or EMPTY!"
-    : "✅ FIREBASE_CONFIG_JSON loaded. Length: " + firebaseJson.Length);
+// 🔹 Log variabili R2 (debug)
+Console.WriteLine("🌍 Environment: " + builder.Environment.EnvironmentName);
+Console.WriteLine("✅ R2_BUCKET_NAME: " + Environment.GetEnvironmentVariable("R2_BUCKET_NAME"));
+Console.WriteLine("✅ R2_PUBLIC_URL: " + Environment.GetEnvironmentVariable("R2_PUBLIC_URL"));
 
 // 🔹 Database (SQL Server o PostgreSQL)
 builder.Services.AddDbContext<FajrDbContext>(options =>
@@ -94,12 +93,12 @@ builder.Services
         {
             OnAuthenticationFailed = ctx =>
             {
-                Console.WriteLine("Authentication failed: " + ctx.Exception.Message);
+                Console.WriteLine("❌ Authentication failed: " + ctx.Exception.Message);
                 return Task.CompletedTask;
             },
             OnTokenValidated = ctx =>
             {
-                Console.WriteLine("Token validato correttamente.");
+                Console.WriteLine("✅ Token validato correttamente.");
                 return Task.CompletedTask;
             }
         };
@@ -151,7 +150,6 @@ builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 
 // 🔹 CORS
-// Leggi origini da env CORS_ORIGINS (separate da virgola) oppure usa default
 var originsFromEnv = Environment.GetEnvironmentVariable("CORS_ORIGINS");
 string[] allowedOrigins = !string.IsNullOrWhiteSpace(originsFromEnv)
     ? originsFromEnv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -170,10 +168,7 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
-              .AllowAnyMethod()
-              // se usi cookie (non necessario per header Authorization):
-              //.AllowCredentials()
-              ;
+              .AllowAnyMethod();
     });
 });
 
@@ -189,48 +184,12 @@ if (app.Environment.IsDevelopment())
 
 // ✅ ORDINE CORRETTO PIPELINE
 app.UseHttpsRedirection();
-
-// 1) Routing
 app.UseRouting();
-
-// 2) CORS (prima di auth/authorization)
 app.UseCors("AllowFrontend");
-
-// 2b) Fallback per preflight OPTIONS (utile se qualche proxy “mangia” il preflight)
-app.Use(async (ctx, next) =>
-{
-    if (HttpMethods.Options.Equals(ctx.Request.Method, StringComparison.OrdinalIgnoreCase))
-    {
-        // Lascia a CORS middleware la priorità, ma se nessuno risponde, rispondiamo noi
-        if (!ctx.Response.Headers.ContainsKey("Access-Control-Allow-Origin"))
-        {
-            var origin = ctx.Request.Headers["Origin"].ToString();
-            if (!string.IsNullOrEmpty(origin))
-            {
-                ctx.Response.Headers["Access-Control-Allow-Origin"] = origin;
-                ctx.Response.Headers["Vary"] = "Origin";
-            }
-            var reqHeaders = ctx.Request.Headers["Access-Control-Request-Headers"].ToString();
-            var reqMethod = ctx.Request.Headers["Access-Control-Request-Method"].ToString();
-            if (!string.IsNullOrEmpty(reqHeaders))
-                ctx.Response.Headers["Access-Control-Allow-Headers"] = reqHeaders;
-            if (!string.IsNullOrEmpty(reqMethod))
-                ctx.Response.Headers["Access-Control-Allow-Methods"] = reqMethod;
-        }
-        ctx.Response.StatusCode = StatusCodes.Status204NoContent;
-        return;
-    }
-    await next();
-});
-
-// 3) Static files (ok lasciarlo qui)
-app.UseStaticFiles();
-
-// 4) Auth
 app.UseAuthentication();
 app.UseAuthorization();
 
-// 5) Global exception wrapper per mantenere CORS anche sui 500
+// 🔹 Global exception wrapper per mantenere CORS anche sui 500
 app.Use(async (context, next) =>
 {
     try
@@ -251,7 +210,6 @@ app.Use(async (context, next) =>
     }
 });
 
-// 6) Endpoints
 app.MapControllers();
 app.MapHealthChecks("/health");
 
