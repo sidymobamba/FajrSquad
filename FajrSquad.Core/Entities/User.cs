@@ -36,7 +36,7 @@ namespace FajrSquad.Core.Entities
 
         // Profile Picture
         [StringLength(500)]
-        public string? ProfilePictureUrl { get; set; }
+        public string? ProfilePicture { get; set; }
 
         // Navigation Properties
         public ICollection<FajrCheckIn> CheckIns { get; set; } = new List<FajrCheckIn>();

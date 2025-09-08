@@ -98,8 +98,8 @@ namespace FajrSquad.API.Controllers
 
             return Ok(ApiResponse<object>.SuccessResponse(new
             {
-                hasAvatar = !string.IsNullOrEmpty(user.ProfilePictureUrl),
-                avatarUrl = user.ProfilePictureUrl
+                hasAvatar = !string.IsNullOrEmpty(user.ProfilePicture),
+                avatarUrl = user.ProfilePicture
             }));
         }
 
@@ -127,8 +127,8 @@ namespace FajrSquad.API.Controllers
                 City = user.City,
                 Role = user.Role,
                 RegisteredAt = user.RegisteredAt,
-                ProfilePictureUrl = user.ProfilePictureUrl,
-                HasAvatar = !string.IsNullOrEmpty(user.ProfilePictureUrl),
+                ProfilePicture = user.ProfilePicture,
+                HasAvatar = !string.IsNullOrEmpty(user.ProfilePicture),
                 Stats = statsResult.Success ? statsResult.Data : null,
                 Settings = userSettings != null ? _mapper.Map<UserSettingsDto>(userSettings) : null
             };
@@ -163,7 +163,7 @@ namespace FajrSquad.API.Controllers
                 user.Name,
                 user.Email,
                 user.City,
-                user.ProfilePictureUrl
+                user.ProfilePicture
             }, "Profilo aggiornato con successo"));
         }
 

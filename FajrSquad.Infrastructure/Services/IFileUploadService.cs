@@ -1,10 +1,10 @@
-﻿using Amazon;
-using Amazon.S3;
-using Amazon.S3.Model;
-using FajrSquad.Infrastructure.Data;
+﻿using FajrSquad.Infrastructure.Data;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System;
+using System.IO;
+using System.Linq;
 
 namespace FajrSquad.Infrastructure.Services
 {
@@ -15,7 +15,6 @@ namespace FajrSquad.Infrastructure.Services
         Task<ServiceResult<bool>> DeleteAvatarAsync(Guid userId);
         Task<ServiceResult<string>> GetAvatarUrlAsync(Guid userId);
         bool IsValidImageFile(IFormFile file);
-
         string GeneratePreSignedUrl(string key, int minutes = 15);
     }
 
@@ -23,9 +22,6 @@ namespace FajrSquad.Infrastructure.Services
     {
         private readonly ILogger<FileUploadService> _logger;
         private readonly IServiceScopeFactory _scopeFactory;
-        private readonly IAmazonS3 _s3;
-        private readonly string _bucket;
-        private readonly string _publicBaseUrl;
         private readonly string[] _allowedExtensions = { ".jpg", ".jpeg", ".png", ".gif" };
         private readonly long _maxFileSize = 5 * 1024 * 1024; // 5MB
 
@@ -33,76 +29,57 @@ namespace FajrSquad.Infrastructure.Services
         {
             _logger = logger;
             _scopeFactory = scopeFactory;
-
-            var accountId = Environment.GetEnvironmentVariable("R2_ACCOUNT_ID")
-                            ?? throw new InvalidOperationException("R2_ACCOUNT_ID not set");
-            var accessKey = Environment.GetEnvironmentVariable("R2_ACCESS_KEY_ID")
-                            ?? throw new InvalidOperationException("R2_ACCESS_KEY_ID not set");
-            var secretKey = Environment.GetEnvironmentVariable("R2_SECRET_ACCESS_KEY")
-                            ?? throw new InvalidOperationException("R2_SECRET_ACCESS_KEY not set");
-
-            _bucket = Environment.GetEnvironmentVariable("R2_BUCKET_NAME")
-                      ?? throw new InvalidOperationException("R2_BUCKET_NAME not set");
-            _publicBaseUrl = Environment.GetEnvironmentVariable("R2_PUBLIC_URL")
-                             ?? throw new InvalidOperationException("R2_PUBLIC_URL not set");
-
-            var cfg = new AmazonS3Config
-            {
-                ServiceURL = $"https://{accountId}.eu.r2.cloudflarestorage.com",
-                ForcePathStyle = true,
-                SignatureVersion = "v4"
-            };
-
-            _s3 = new AmazonS3Client(accessKey, secretKey, cfg);
         }
 
         public async Task<ServiceResult<object>> UploadAvatarAsync(IFormFile file, Guid userId)
         {
             try
             {
+                _logger.LogInformation("[UploadAvatarAsync] Start upload avatar per UserId={UserId}. FileName={FileName}, ContentType={ContentType}, Size={Size}", userId, file?.FileName, file?.ContentType, file?.Length);
                 if (!IsValidImageFile(file))
                     return ServiceResult<object>.ErrorResult("File non valido. Solo JPG/PNG/GIF fino a 5MB");
 
                 await DeleteAvatarAsync(userId);
 
-                var key = $"avatars/{userId}_{DateTime.UtcNow:yyyyMMddHHmmss}{Path.GetExtension(file.FileName)}";
-
-                var request = new GetPreSignedUrlRequest
-                {
-                    BucketName = _bucket,
-                    Key = key,
-                    Verb = HttpVerb.PUT,
-                    Expires = DateTime.UtcNow.AddMinutes(15),
-                    ContentType = file.ContentType
-                };
-                var uploadUrl = _s3.GetPreSignedURL(request);
-
-                var publicUrl = $"{_publicBaseUrl}/{key}";
+                using var ms = new MemoryStream();
+                await file.CopyToAsync(ms);
+                var bytes = ms.ToArray();
+                _logger.LogInformation("[UploadAvatarAsync] Bytes letti: {BytesLength}", bytes.Length);
+                var base64 = Convert.ToBase64String(bytes);
+                var dataUrl = $"data:{file.ContentType};base64,{base64}";
+                var previewLen = Math.Min(dataUrl.Length, 200);
+                var preview = dataUrl.Substring(0, previewLen);
+                _logger.LogInformation("[UploadAvatarAsync] Base64 preview (primi {PreviewLen} chars): {Preview}", previewLen, preview);
+                _logger.LogDebug("[UploadAvatarAsync] Base64 completo (len={Len})", dataUrl.Length);
 
                 using var scope = _scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
                 var user = await db.Users.FindAsync(userId);
                 if (user != null)
                 {
-                    user.ProfilePictureUrl = publicUrl;
+                    _logger.LogInformation("[UploadAvatarAsync] Salvataggio Base64 in DB per UserId={UserId}", userId);
+                    user.ProfilePicture = dataUrl;
                     await db.SaveChangesAsync();
+                    _logger.LogInformation("[UploadAvatarAsync] Salvataggio completato per UserId={UserId}", userId);
                 }
 
                 return ServiceResult<object>.SuccessResult(new
                 {
-                    uploadUrl,
-                    publicUrl
+                    avatarBase64 = user?.ProfilePicture
                 }, "Avatar caricato con successo");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "S3 error uploading avatar for {UserId}", userId);
+                _logger.LogError(ex, "Error saving base64 avatar for {UserId}", userId);
                 return ServiceResult<object>.ErrorResult("Errore upload avatar");
             }
         }
 
         public Task<ServiceResult<object>> UpdateAvatarAsync(IFormFile file, Guid userId)
-            => UploadAvatarAsync(file, userId);
+        {
+            _logger.LogInformation("[UpdateAvatarAsync] Update avatar richiesto per UserId={UserId}", userId);
+            return UploadAvatarAsync(file, userId);
+        }
 
         public async Task<ServiceResult<bool>> DeleteAvatarAsync(Guid userId)
         {
@@ -112,19 +89,19 @@ namespace FajrSquad.Infrastructure.Services
                 var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
                 var user = await db.Users.FindAsync(userId);
 
-                if (user != null && !string.IsNullOrEmpty(user.ProfilePictureUrl))
+                if (user != null && !string.IsNullOrEmpty(user.ProfilePicture))
                 {
-                    var key = user.ProfilePictureUrl.Replace(_publicBaseUrl + "/", "");
-                    await _s3.DeleteObjectAsync(_bucket, key);
-                    user.ProfilePictureUrl = null;
+                    _logger.LogInformation("[DeleteAvatarAsync] Eliminazione avatar per UserId={UserId}", userId);
+                    user.ProfilePicture = null;
                     await db.SaveChangesAsync();
+                    _logger.LogInformation("[DeleteAvatarAsync] Eliminazione completata per UserId={UserId}", userId);
                 }
 
                 return ServiceResult<bool>.SuccessResult(true, "Avatar eliminato con successo");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error deleting avatar");
+                _logger.LogError(ex, "Error deleting base64 avatar");
                 return ServiceResult<bool>.ErrorResult("Errore eliminazione avatar");
             }
         }
@@ -134,32 +111,33 @@ namespace FajrSquad.Infrastructure.Services
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
             var user = await db.Users.FindAsync(userId);
-            return ServiceResult<string>.SuccessResult(user?.ProfilePictureUrl ?? string.Empty, "Avatar recuperato");
+            _logger.LogInformation("[GetAvatarUrlAsync] Recupero avatar per UserId={UserId}. HasAvatar={HasAvatar}", userId, !string.IsNullOrEmpty(user?.ProfilePicture));
+            return ServiceResult<string>.SuccessResult(user?.ProfilePicture ?? string.Empty, "Avatar recuperato");
         }
 
         public bool IsValidImageFile(IFormFile file)
         {
-            if (file == null || file.Length == 0) return false;
-            if (file.Length > _maxFileSize) return false;
+            if (file == null || file.Length == 0)
+            {
+                _logger.LogWarning("[IsValidImageFile] File nullo o vuoto");
+                return false;
+            }
+            if (file.Length > _maxFileSize)
+            {
+                _logger.LogWarning("[IsValidImageFile] File troppo grande: {Size} bytes (max {Max})", file.Length, _maxFileSize);
+                return false;
+            }
 
             var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-            return _allowedExtensions.Contains(ext);
+            var isAllowed = _allowedExtensions.Contains(ext);
+            _logger.LogInformation("[IsValidImageFile] Estensione={Ext}, ContentType={ContentType}, Size={Size}, Valido={IsAllowed}", ext, file.ContentType, file.Length, isAllowed);
+            return isAllowed;
         }
 
         public string GeneratePreSignedUrl(string key, int minutes = 15)
         {
-            var request = new GetPreSignedUrlRequest
-            {
-                BucketName = _bucket,
-                Key = key,
-                Verb = HttpVerb.PUT,
-                Expires = DateTime.UtcNow.AddMinutes(minutes),
-                ContentType = "image/jpeg"
-            };
-
-            var url = _s3.GetPreSignedURL(request);
-            _logger.LogInformation("✅ PreSigned URL generato: {Url}", url);
-            return url;
+            // Non più supportato con salvataggio Base64 inline
+            return string.Empty;
         }
     }
 }
