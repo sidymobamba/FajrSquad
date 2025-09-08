@@ -36,13 +36,13 @@ namespace FajrSquad.API.Controllers
             _mapper = mapper;
         }
 
-        [HttpGet("test-presign")]
-        public IActionResult TestPresign()
-        {
-            var key = $"avatars/test_{Guid.NewGuid()}.jpg";
-            var url = _fileUploadService.GeneratePreSignedUrl(key);
-            return Ok(new { uploadUrl = url });
-        }
+        //[HttpGet("test-presign")]
+        //public IActionResult TestPresign()
+        //{
+        //    var key = $"avatars/test_{Guid.NewGuid()}.jpg";
+        //    var url = _fileUploadService.GeneratePreSignedUrl(key);
+        //    return Ok(new { uploadUrl = url });
+        //}
 
         [HttpPost("upload-avatar")]
         public async Task<IActionResult> UploadAvatar(IFormFile file)
