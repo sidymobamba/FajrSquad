@@ -39,7 +39,7 @@ namespace FajrSquad.Infrastructure.Services
         public async Task SendHadithNotification()
         {
             var hadith = await _db.Hadiths
-                .Where(h => h.Language == "fr" && h.IsActive && !h.IsDeleted)
+                .Where(h => h.Language == "it" && h.IsActive && !h.IsDeleted)
                 .OrderBy(h => h.Priority)
                 .ThenBy(h => Guid.NewGuid())
                 .FirstOrDefaultAsync();

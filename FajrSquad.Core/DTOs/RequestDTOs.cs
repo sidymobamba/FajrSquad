@@ -3,6 +3,18 @@ using FajrSquad.Core.Enums;
 
 namespace FajrSquad.Core.DTOs
 {
+
+    public record WeeklyDayDto(string Date, string Status, string? CheckinTime, string FajrTime);
+    public record TrendDeltaDto(string Metric, int Delta);
+    public record LeaderboardPreviewEntryDto(Guid UserId, string Name, string? City, int Rank, int Score);
+
+    public record WeeklyRecapResponseDto(
+        object Period, int WeeklyScore, int Completed, int Total,
+        string AverageCheckinTime, int CurrentStreak, int BestStreak,
+        List<WeeklyDayDto> WeekDays, List<TrendDeltaDto> Trends,
+        List<LeaderboardPreviewEntryDto> LeaderboardTop
+    );
+
     public class CheckInRequest
     {
         [Required(ErrorMessage = "Lo stato del check-in è obbligatorio")]
@@ -129,4 +141,16 @@ namespace FajrSquad.Core.DTOs
         [StringLength(1000, MinimumLength = 10, ErrorMessage = "Il messaggio deve essere tra 10 e 1000 caratteri")]
         public string Message { get; set; } = string.Empty;
     }
+
+    public record MonthlyLeaderboardEntryDto(
+    Guid UserId, string Name, string? City,
+    int Rank, int Points, int OnTime, int Late, int Missed,
+    string AvgCheckinTime, int EffortScore
+    );
+
+    public record MonthlyLeaderboardResponseDto(
+        object ScopeMeta, List<MonthlyLeaderboardEntryDto> Entries,
+        object Me, object Paging
+    );
+
 }
