@@ -28,7 +28,11 @@ namespace FajrSquad.API.Controllers
             if (exists)
                 return BadRequest("Telefono già registrato.");
 
-            var hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
+            // Controllo che il PIN sia lungo 4 caratteri e che siano tutti numeri
+            if (request.Pin.Length != 4 || !request.Pin.All(char.IsDigit))
+                return BadRequest("Il PIN deve essere di 4 cifre numeriche.");
+
+            var hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Pin);
 
             var user = new User
             {
@@ -120,8 +124,8 @@ namespace FajrSquad.API.Controllers
             if (user == null)
                 return Unauthorized("Utente non trovato.");
 
-            if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-                return Unauthorized("Password errata.");
+            if (!BCrypt.Net.BCrypt.Verify(request.Pin, user.PasswordHash))
+                return Unauthorized("PIN errato.");
 
             var token = jwt.GenerateToken(user);
             return Ok(new { token, user.Id, user.Name, user.Email, user.City });
@@ -135,21 +139,28 @@ namespace FajrSquad.API.Controllers
             if (userId == null)
                 return Unauthorized();
 
-            if (string.IsNullOrWhiteSpace(request.OldPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
-                return BadRequest("Vecchia e nuova password sono richieste.");
+            if (string.IsNullOrWhiteSpace(request.OldPin) || string.IsNullOrWhiteSpace(request.NewPin))
+                return BadRequest("Vecchio e nuovo PIN sono richiesti.");
+
+            // Controllo che i PIN siano di 4 cifre numeriche
+            if (request.OldPin.Length != 4 || !request.OldPin.All(char.IsDigit))
+                return BadRequest("Il vecchio PIN deve essere di 4 cifre numeriche.");
+            
+            if (request.NewPin.Length != 4 || !request.NewPin.All(char.IsDigit))
+                return BadRequest("Il nuovo PIN deve essere di 4 cifre numeriche.");
 
             var user = await _db.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
             if (user == null)
                 return Unauthorized();
 
-            if (!BCrypt.Net.BCrypt.Verify(request.OldPassword, user.PasswordHash))
-                return BadRequest("La vecchia password non è corretta.");
+            if (!BCrypt.Net.BCrypt.Verify(request.OldPin, user.PasswordHash))
+                return BadRequest("Il vecchio PIN non è corretto.");
 
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPin);
             _db.Users.Update(user);
             await _db.SaveChangesAsync();
 
-            return Ok("Password cambiata con successo.");
+            return Ok("PIN cambiato con successo.");
         }
 
         [Authorize]

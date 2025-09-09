@@ -173,18 +173,25 @@ namespace FajrSquad.API.Controllers
             if (!TryGetUserId(out var userId))
                 return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
+            // Controllo che i PIN siano di 4 cifre numeriche
+            if (request.OldPin.Length != 4 || !request.OldPin.All(char.IsDigit))
+                return BadRequest(ApiResponse<object>.ErrorResponse("Il vecchio PIN deve essere di 4 cifre numeriche."));
+            
+            if (request.NewPin.Length != 4 || !request.NewPin.All(char.IsDigit))
+                return BadRequest(ApiResponse<object>.ErrorResponse("Il nuovo PIN deve essere di 4 cifre numeriche."));
+
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null)
                 return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
 
-            if (!BCrypt.Net.BCrypt.Verify(request.OldPassword, user.PasswordHash))
-                return BadRequest(ApiResponse<object>.ErrorResponse("Password attuale non corretta"));
+            if (!BCrypt.Net.BCrypt.Verify(request.OldPin, user.PasswordHash))
+                return BadRequest(ApiResponse<object>.ErrorResponse("PIN attuale non corretto"));
 
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPin);
 
             await _context.SaveChangesAsync();
 
-            return Ok(ApiResponse<object>.SuccessResponse(null, "Password cambiata con successo"));
+            return Ok(ApiResponse<object>.SuccessResponse(null, "PIN cambiato con successo"));
         }
 
         // ⚡ Settings, Stats e DeleteAccount li lascio invariati (già corretti)

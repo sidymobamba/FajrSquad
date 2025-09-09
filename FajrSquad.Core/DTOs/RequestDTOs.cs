@@ -40,9 +40,10 @@ namespace FajrSquad.Core.DTOs
         [StringLength(50, MinimumLength = 2, ErrorMessage = "La città deve essere tra 2 e 50 caratteri")]
         public string City { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "La password è obbligatoria")]
-        [StringLength(100, MinimumLength = 6, ErrorMessage = "La password deve essere almeno di 6 caratteri")]
-        public string Password { get; set; } = string.Empty;
+        [Required(ErrorMessage = "Il PIN è obbligatorio")]
+        [StringLength(4, MinimumLength = 4, ErrorMessage = "Il PIN deve essere di 4 cifre")]
+        [RegularExpression(@"^\d{4}$", ErrorMessage = "Il PIN deve contenere solo numeri")]
+        public string Pin { get; set; } = string.Empty;
     }
 
     public class RegisterWithOtpRequest
@@ -76,8 +77,10 @@ namespace FajrSquad.Core.DTOs
         [Phone]
         public string Phone { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "La password è obbligatoria")]
-        public string Password { get; set; } = string.Empty;
+        [Required(ErrorMessage = "Il PIN è obbligatorio")]
+        [StringLength(4, MinimumLength = 4, ErrorMessage = "Il PIN deve essere di 4 cifre")]
+        [RegularExpression(@"^\d{4}$", ErrorMessage = "Il PIN deve contenere solo numeri")]
+        public string Pin { get; set; } = string.Empty;
     }
 
     public class LoginWithOtpRequest
@@ -100,12 +103,15 @@ namespace FajrSquad.Core.DTOs
 
     public class ChangePasswordRequest
     {
-        [Required(ErrorMessage = "La vecchia password è obbligatoria")]
-        public string OldPassword { get; set; } = string.Empty;
+        [Required(ErrorMessage = "Il vecchio PIN è obbligatorio")]
+        [StringLength(4, MinimumLength = 4, ErrorMessage = "Il PIN deve essere di 4 cifre")]
+        [RegularExpression(@"^\d{4}$", ErrorMessage = "Il PIN deve contenere solo numeri")]
+        public string OldPin { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "La nuova password è obbligatoria")]
-        [StringLength(100, MinimumLength = 6, ErrorMessage = "La password deve essere almeno di 6 caratteri")]
-        public string NewPassword { get; set; } = string.Empty;
+        [Required(ErrorMessage = "Il nuovo PIN è obbligatorio")]
+        [StringLength(4, MinimumLength = 4, ErrorMessage = "Il PIN deve essere di 4 cifre")]
+        [RegularExpression(@"^\d{4}$", ErrorMessage = "Il PIN deve contenere solo numeri")]
+        public string NewPin { get; set; } = string.Empty;
     }
 
     public class UpdateUserRequest
