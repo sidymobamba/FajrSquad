@@ -65,7 +65,7 @@ namespace FajrSquad.Infrastructure.Services
 
                 return ServiceResult<object>.SuccessResult(new
                 {
-                    avatarBase64 = user?.ProfilePicture
+                    profilePicture = user?.ProfilePicture
                 }, "Avatar caricato con successo");
             }
             catch (Exception ex)
