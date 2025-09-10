@@ -7,6 +7,7 @@ using FajrSquad.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace FajrSquad.API.Controllers
 {
@@ -17,15 +18,21 @@ namespace FajrSquad.API.Controllers
         private readonly FajrDbContext _db;
         private readonly IFajrService _fajrService;
         private readonly ILogger<FajrController> _logger;
+        private readonly IConfiguration _cfg;
 
         // 🔹 per ora fisso, puoi sostituire con TimeZone preso da User
         private const string DefaultTimeZone = "Europe/Rome"; // oppure "Africa/Dakar"
 
-        public FajrController(FajrDbContext db, IFajrService fajrService, ILogger<FajrController> logger)
+        public FajrController(
+            FajrDbContext db,
+            IFajrService fajrService,
+            ILogger<FajrController> logger,
+            IConfiguration cfg)
         {
             _db = db;
             _fajrService = fajrService;
             _logger = logger;
+            _cfg = cfg;
         }
 
         // ----------------------------------------------------
@@ -33,6 +40,8 @@ namespace FajrSquad.API.Controllers
         // ----------------------------------------------------
         [Authorize]
         [HttpPost("checkin")]
+        [Consumes("application/json")]
+        [Produces("application/json")]
         public async Task<IActionResult> CheckIn(CheckInRequest request)
         {
             try
@@ -42,14 +51,38 @@ namespace FajrSquad.API.Controllers
 
                 var result = await _fajrService.CheckInAsync(userId, request);
 
+                // ✅ Caso validazione (enum non valido, ecc.)
+                if (!result.Success && result.ValidationErrors.Any())
+                    return BadRequest(ApiResponse<object>.ValidationErrorResponse(result.ValidationErrors));
+
+                // ✅ Idempotenza: se il service segnala errore, ma oggi c’è già un check-in,
+                //    rispondiamo 200 OK con i dati esistenti.
                 if (!result.Success)
                 {
-                    if (result.ValidationErrors.Any())
-                        return BadRequest(ApiResponse<object>.ValidationErrorResponse(result.ValidationErrors));
+                    var today = GetUserToday();
+                    var existing = await _db.FajrCheckIns
+                        .Where(x => x.UserId == userId && x.Date == today)
+                        .FirstOrDefaultAsync();
 
-                    return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
+                    if (existing != null)
+                    {
+                        var resp = new CheckInResponse
+                        {
+                            Message = "Hai già effettuato il check-in oggi",
+                            Inspiration = string.Empty,              // opzionale
+                            Date = today,
+                            Status = existing.Status.ToString()
+                        };
+
+                        // Messaggio di contesto anche nel wrapper
+                        return Ok(ApiResponse<CheckInResponse>.SuccessResponse(resp, "Check-in già presente"));
+                    }
+
+                    // Se non c'è alcun check-in (errore diverso), resta un 400
+                    return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage ?? "Impossibile completare il check-in"));
                 }
 
+                // ✅ Caso successo "normale"
                 return Ok(ApiResponse<CheckInResponse>.SuccessResponse(result.Data!, "Check-in completato con successo"));
             }
             catch (Exception ex)
@@ -91,11 +124,11 @@ namespace FajrSquad.API.Controllers
         [Authorize]
         [HttpGet("my-history")]
         public async Task<IActionResult> GetMyHistory(
-     [FromQuery] int page = 1,
-     [FromQuery] int pageSize = 30,
-     [FromQuery] DateTime? start = null,
-     [FromQuery] DateTime? end = null,
-     [FromQuery] string? status = null)
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 30,
+            [FromQuery] DateTime? start = null,
+            [FromQuery] DateTime? end = null,
+            [FromQuery] string? status = null)
         {
             try
             {
@@ -209,7 +242,7 @@ namespace FajrSquad.API.Controllers
                     .Where(f => f.Date == today)
                     .Include(f => f.User)
                     .OrderBy(f => f.Status)
-                    .ThenBy(f => f.CreatedAt)
+                    .ThenBy(f => f.CheckInAtUtc ?? f.CreatedAt) // 👈 preferisci timestamp reale
                     .Take(limit)
                     .Select((f, index) => new LeaderboardEntry
                     {
@@ -231,12 +264,14 @@ namespace FajrSquad.API.Controllers
             }
         }
 
-
+        // ----------------------------------------------------
+        // 🔹 Monthly Leaderboard
+        // ----------------------------------------------------
         [HttpGet("leaderboard/monthly")]
         public async Task<IActionResult> GetMonthlyLeaderboard(
-    [FromQuery] int? year, [FromQuery] int? month,
-    [FromQuery] int limit = 50, [FromQuery] int offset = 0,
-    [FromQuery] string? tz = null)
+            [FromQuery] int? year, [FromQuery] int? month,
+            [FromQuery] int limit = 50, [FromQuery] int offset = 0,
+            [FromQuery] string? tz = null)
         {
             try
             {
@@ -265,13 +300,17 @@ namespace FajrSquad.API.Controllers
 
                 var grouped = await checkins
                     .GroupBy(f => new { f.UserId, f.User.Name, f.User.City })
-                    .Select(g => new {
+                    .Select(g => new
+                    {
                         g.Key.UserId,
                         g.Key.Name,
                         g.Key.City,
                         OnTime = g.Count(x => x.Status == CheckInStatus.OnTime),
                         Late = g.Count(x => x.Status == CheckInStatus.Late),
-                        Times = g.Where(x => x.CreatedAt != null).Select(x => x.CreatedAt!)
+                        // 👇 usa sempre il timestamp reale
+                        Times = g.Select(x => x.CheckInAtUtc ?? x.CreatedAt)
+                                 .Where(t => t != null)
+                                 .Select(t => t!)
                     })
                     .ToListAsync();
 
@@ -418,10 +457,11 @@ namespace FajrSquad.API.Controllers
                         : "Completed";
 
                     string? checkin = null;
-                    if (entry?.CreatedAt != null)
+                    var stampUtc = entry?.CheckInAtUtc ?? entry?.CreatedAt;
+                    if (stampUtc != null)
                     {
                         var createdLocal = TimeZoneInfo.ConvertTimeFromUtc(
-                            DateTime.SpecifyKind(entry.CreatedAt, DateTimeKind.Utc), tzInfo);
+                            DateTime.SpecifyKind(stampUtc.Value, DateTimeKind.Utc), tzInfo);
                         checkin = createdLocal.ToString("HH:mm");
                         minutes.Add(createdLocal.Hour * 60 + createdLocal.Minute);
                     }
@@ -441,7 +481,7 @@ namespace FajrSquad.API.Controllers
                 var currentStreak = streakRes.Success ? streakRes.Data : 0;
 
                 // semplice best streak (su storico settimana attuale)
-                int BestStreak(List<Core.Entities.FajrCheckIn> list)
+                int BestStreak(List<FajrCheckIn> list)
                 {
                     int best = 0, cur = 0; DateTime? prev = null;
                     foreach (var x in list.OrderBy(x => x.Date))
@@ -461,11 +501,11 @@ namespace FajrSquad.API.Controllers
                 var prevScore = (int)Math.Round(prevCompleted / 7.0 * 100);
 
                 var trends = new List<TrendDeltaDto> {
-            new("Completed", completed - prevCompleted),
-            new("Score", weeklyScore - prevScore)
-        };
+                    new("Completed", completed - prevCompleted),
+                    new("Score", weeklyScore - prevScore)
+                };
 
-                // mini leaderboard settimanale (top 5) — no funzioni locali in query EF
+                // mini leaderboard settimanale (top 5)
                 var weeklyLb = await _db.FajrCheckIns
                     .Where(f => f.Date >= monday && f.Date <= sunday)
                     .GroupBy(f => new { f.UserId, f.User.Name, f.User.City })
@@ -504,12 +544,8 @@ namespace FajrSquad.API.Controllers
             }
         }
 
-
         // ----------------------------------------------------
-        // 🔹 Weekly Leaderboard
-        // ----------------------------------------------------
-        // ----------------------------------------------------
-        // 🔹 Weekly Leaderboard (lun->dom, no First() in Select)
+        // 🔹 Weekly Leaderboard (lun->dom)
         // ----------------------------------------------------
         [HttpGet("leaderboard/weekly")]
         public async Task<IActionResult> GetWeeklyLeaderboard([FromQuery] int limit = 10)
@@ -553,9 +589,6 @@ namespace FajrSquad.API.Controllers
         }
 
         // ----------------------------------------------------
-        // 🔹 Today Status
-        // ----------------------------------------------------
-        // ----------------------------------------------------
         // 🔹 Today (Italia-first, orario localizzato)
         // ----------------------------------------------------
         [Authorize]
@@ -575,19 +608,24 @@ namespace FajrSquad.API.Controllers
                     .FirstOrDefaultAsync();
 
                 string? checkinTime = null;
-                if (entry?.CreatedAt != null)
+                var stampUtc = entry?.CheckInAtUtc ?? entry?.CreatedAt;
+                if (stampUtc != null)
                 {
-                    var createdLocal = TimeZoneInfo.ConvertTimeFromUtc(
-                        DateTime.SpecifyKind(entry.CreatedAt, DateTimeKind.Utc), tzInfo);
-                    checkinTime = createdLocal.ToString("HH:mm");
+                    var local = TimeZoneInfo.ConvertTimeFromUtc(
+                        DateTime.SpecifyKind(stampUtc.Value, DateTimeKind.Utc), tzInfo);
+                    checkinTime = local.ToString("HH:mm");
                 }
+
+                // ➕ offset suoneria (default 40)
+                var alarmOffset = _cfg.GetValue<int?>("Alarm:FajrOffsetMinutes") ?? 40;
 
                 return Ok(ApiResponse<object>.SuccessResponse(new
                 {
                     date = today.ToString("yyyy-MM-dd"),
                     hasCheckedIn = entry != null,
                     status = entry?.Status.ToString(),
-                    checkinTime
+                    checkinTime,
+                    alarmOffsetMinutes = alarmOffset
                 }));
             }
             catch (Exception ex)
@@ -599,9 +637,6 @@ namespace FajrSquad.API.Controllers
 
         // ----------------------------------------------------
         // 🔹 Missed Check-In
-        // ----------------------------------------------------
-        // ----------------------------------------------------
-        // 🔹 Missed Check-In (usa oggi nel fuso Italia di default)
         // ----------------------------------------------------
         [Authorize(Roles = "Admin")]
         [HttpGet("missed-checkin")]
@@ -661,6 +696,5 @@ namespace FajrSquad.API.Controllers
                 return TimeZoneInfo.FindSystemTimeZoneById("W. Europe Standard Time");
             }
         }
-
     }
 }

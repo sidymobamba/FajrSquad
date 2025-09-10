@@ -133,8 +133,10 @@ namespace FajrSquad.Core.DTOs
         public DateTime Date { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? Notes { get; set; }
-    }
 
+        // ➕ opzionale (coerente con il tuo frontend che ha createdAt?)
+        public DateTime? CreatedAt { get; set; }
+    }
     public class DeviceTokenDto
     {
         [Required]
