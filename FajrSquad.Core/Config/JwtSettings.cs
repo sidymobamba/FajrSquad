@@ -8,10 +8,11 @@ namespace FajrSquad.Core.Config
 {
     public class JwtSettings
     {
-        public string Secret { get; set; } = default!;
-        public int ExpirationMinutes { get; set; } = 60;
+        public string Secret { get; set; } = string.Empty;
         public string Issuer { get; set; } = "FajrSquad";
         public string Audience { get; set; } = "FajrSquadUsers";
+        public int ExpirationMinutes { get; set; } = 60;  // durata access token
+        public int RefreshTokenDays { get; set; } = 60;   // durata refresh token
     }
 
 }

@@ -6,8 +6,9 @@ using FajrSquad.Core.DTOs;
 using FajrSquad.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using BCrypt.Net;
+using System.Security.Cryptography;
 using AutoMapper;
+using Microsoft.Extensions.Configuration;
 
 namespace FajrSquad.API.Controllers
 {
@@ -21,28 +22,87 @@ namespace FajrSquad.API.Controllers
         private readonly IFajrService _fajrService;
         private readonly ILogger<ProfileController> _logger;
         private readonly IMapper _mapper;
+        private readonly IConfiguration _cfg;
+
+        private const int DefaultRefreshDays = 60; // 2 mesi
 
         public ProfileController(
             IFileUploadService fileUploadService,
             FajrDbContext context,
             IFajrService fajrService,
             ILogger<ProfileController> logger,
-            IMapper mapper)
+            IMapper mapper,
+            IConfiguration cfg)
         {
             _fileUploadService = fileUploadService;
             _context = context;
             _fajrService = fajrService;
             _logger = logger;
             _mapper = mapper;
+            _cfg = cfg;
         }
 
-        //[HttpGet("test-presign")]
-        //public IActionResult TestPresign()
-        //{
-        //    var key = $"avatars/test_{Guid.NewGuid()}.jpg";
-        //    var url = _fileUploadService.GeneratePreSignedUrl(key);
-        //    return Ok(new { uploadUrl = url });
-        //}
+        // ========= Helpers =========
+
+        private bool TryGetUserId(out Guid userId)
+        {
+            userId = Guid.Empty;
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+            return !string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out userId);
+        }
+
+        private static string GenerateSecureToken(int bytes = 64)
+        {
+            var buf = new byte[bytes];
+            RandomNumberGenerator.Fill(buf);
+            return Convert.ToBase64String(buf).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+        }
+
+        private int GetAccessMinutesFromConfig() =>
+            _cfg.GetValue<int?>("Jwt:ExpirationMinutes") ?? 60;
+
+        private int GetRefreshDaysFromConfig() =>
+            _cfg.GetValue<int?>("Jwt:RefreshTokenDays") ?? DefaultRefreshDays;
+
+        private AuthResponse BuildAuthResponse(User user, string accessToken, DateTime accessExpUtc, RefreshToken rt)
+        {
+            return new AuthResponse
+            {
+                AccessToken = accessToken,
+                AccessTokenExpiresAt = accessExpUtc,
+                ExpiresIn = (int)(accessExpUtc - DateTime.UtcNow).TotalSeconds,
+                RefreshToken = rt.Token,
+                RefreshTokenExpiresAt = rt.Expires,
+                TokenType = "Bearer",
+                User = new UserSummaryDto
+                {
+                    Id = user.Id.ToString(),
+                    Name = user.Name,
+                    Email = user.Email,
+                    Phone = user.Phone,
+                    City = user.City,
+                    Role = user.Role,
+                    Avatar = user.ProfilePicture
+                }
+            };
+        }
+
+        private async Task<RefreshToken> CreateAndStoreRefreshAsync(User user)
+        {
+            var rt = new RefreshToken
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                Token = GenerateSecureToken(64),
+                Created = DateTime.UtcNow,
+                Expires = DateTime.UtcNow.AddDays(GetRefreshDaysFromConfig())
+            };
+            _context.RefreshTokens.Add(rt);
+            await _context.SaveChangesAsync();
+            return rt;
+        }
+
+        // ========= Avatar =========
 
         [HttpPost("upload-avatar")]
         public async Task<IActionResult> UploadAvatar(IFormFile file)
@@ -51,9 +111,7 @@ namespace FajrSquad.API.Controllers
                 return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
             var result = await _fileUploadService.UploadAvatarAsync(file, userId);
-
-            if (!result.Success)
-                return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
+            if (!result.Success) return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
 
             return Ok(ApiResponse<object>.SuccessResponse(result.Data!, "Avatar caricato con successo"));
         }
@@ -65,9 +123,7 @@ namespace FajrSquad.API.Controllers
                 return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
             var result = await _fileUploadService.UpdateAvatarAsync(file, userId);
-
-            if (!result.Success)
-                return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
+            if (!result.Success) return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
 
             return Ok(ApiResponse<object>.SuccessResponse(result.Data!, "Avatar aggiornato con successo"));
         }
@@ -79,9 +135,7 @@ namespace FajrSquad.API.Controllers
                 return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
             var result = await _fileUploadService.DeleteAvatarAsync(userId);
-
-            if (!result.Success)
-                return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
+            if (!result.Success) return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
 
             return Ok(ApiResponse<bool>.SuccessResponse(result.Data, "Avatar eliminato con successo"));
         }
@@ -93,8 +147,7 @@ namespace FajrSquad.API.Controllers
                 return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
-            if (user == null)
-                return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
+            if (user == null) return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
 
             return Ok(ApiResponse<object>.SuccessResponse(new
             {
@@ -103,6 +156,8 @@ namespace FajrSquad.API.Controllers
             }));
         }
 
+        // ========= Profilo & Stats =========
+
         [HttpGet("me")]
         public async Task<IActionResult> GetMyProfile()
         {
@@ -110,12 +165,9 @@ namespace FajrSquad.API.Controllers
                 return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
-            if (user == null)
-                return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
+            if (user == null) return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
 
-            var userSettings = await _context.UserSettings
-                .FirstOrDefaultAsync(s => s.UserId == userId && !s.IsDeleted);
-
+            var userSettings = await _context.UserSettings.FirstOrDefaultAsync(s => s.UserId == userId && !s.IsDeleted);
             var statsResult = await _fajrService.GetUserStatsAsync(userId);
 
             var profileDto = new UserProfileDto
@@ -143,17 +195,11 @@ namespace FajrSquad.API.Controllers
                 return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
-            if (user == null)
-                return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
+            if (user == null) return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
 
-            if (!string.IsNullOrWhiteSpace(request.Name))
-                user.Name = request.Name;
-
-            if (!string.IsNullOrWhiteSpace(request.Email))
-                user.Email = request.Email;
-
-            if (!string.IsNullOrWhiteSpace(request.City))
-                user.City = request.City;
+            if (!string.IsNullOrWhiteSpace(request.Name)) user.Name = request.Name;
+            if (!string.IsNullOrWhiteSpace(request.Email)) user.Email = request.Email;
+            if (!string.IsNullOrWhiteSpace(request.City)) user.City = request.City;
 
             await _context.SaveChangesAsync();
 
@@ -167,41 +213,47 @@ namespace FajrSquad.API.Controllers
             }, "Profilo aggiornato con successo"));
         }
 
+        // ========= Cambio PIN con rotazione token =========
+
         [HttpPost("change-password")]
-        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+        public async Task<IActionResult> ChangePassword(
+            [FromBody] ChangePasswordRequest request,
+            [FromServices] JwtService jwt)
         {
             if (!TryGetUserId(out var userId))
                 return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
-            // Controllo che i PIN siano di 4 cifre numeriche
-            if (request.OldPin.Length != 4 || !request.OldPin.All(char.IsDigit))
+            // Validazioni PIN 4 cifre
+            if (request.OldPin?.Length != 4 || !request.OldPin.All(char.IsDigit))
                 return BadRequest(ApiResponse<object>.ErrorResponse("Il vecchio PIN deve essere di 4 cifre numeriche."));
-            
-            if (request.NewPin.Length != 4 || !request.NewPin.All(char.IsDigit))
+            if (request.NewPin?.Length != 4 || !request.NewPin.All(char.IsDigit))
                 return BadRequest(ApiResponse<object>.ErrorResponse("Il nuovo PIN deve essere di 4 cifre numeriche."));
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
-            if (user == null)
-                return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
+            if (user == null) return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
 
             if (!BCrypt.Net.BCrypt.Verify(request.OldPin, user.PasswordHash))
                 return BadRequest(ApiResponse<object>.ErrorResponse("PIN attuale non corretto"));
 
+            // 1) aggiorna hash
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPin);
-
             await _context.SaveChangesAsync();
 
-            return Ok(ApiResponse<object>.SuccessResponse(null, "PIN cambiato con successo"));
-        }
+            // 2) revoca tutti i refresh token attivi
+            var activeRefresh = await _context.RefreshTokens
+                .Where(r => r.UserId == user.Id && r.Revoked == null && r.Expires > DateTime.UtcNow)
+                .ToListAsync();
+            foreach (var r in activeRefresh) r.Revoked = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
 
-        // ⚡ Settings, Stats e DeleteAccount li lascio invariati (già corretti)
+            // 3) emetti nuova coppia token per evitare logout lato app
+            var accessMinutes = GetAccessMinutesFromConfig();
+            var accessToken = jwt.GenerateAccessToken(user);
+            var accessExpUtc = DateTime.UtcNow.AddMinutes(accessMinutes);
+            var newRefresh = await CreateAndStoreRefreshAsync(user);
+            var payload = BuildAuthResponse(user, accessToken, accessExpUtc, newRefresh);
 
-        private bool TryGetUserId(out Guid userId)
-        {
-            userId = Guid.Empty;
-            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-
-            return !string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out userId);
+            return Ok(ApiResponse<AuthResponse>.SuccessResponse(payload, "PIN cambiato con successo"));
         }
     }
 }

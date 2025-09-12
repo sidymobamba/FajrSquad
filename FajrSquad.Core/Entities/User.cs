@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace FajrSquad.Core.Entities
 {
@@ -34,12 +35,15 @@ namespace FajrSquad.Core.Entities
 
         public DateTime RegisteredAt { get; set; } = DateTime.UtcNow;
 
-        // Profile Picture
         [StringLength(500)]
         public string? ProfilePicture { get; set; }
 
-        // Navigation Properties
+        // Navigation esistenti
         public ICollection<FajrCheckIn> CheckIns { get; set; } = new List<FajrCheckIn>();
         public UserSettings? Settings { get; set; }
+
+        // 🔐 NUOVO: relazione 1-N con RefreshToken
+        [InverseProperty(nameof(RefreshToken.User))]
+        public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     }
 }

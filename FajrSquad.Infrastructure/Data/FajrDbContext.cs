@@ -17,6 +17,7 @@ namespace FajrSquad.Infrastructure.Data
         public DbSet<DeviceToken> DeviceTokens => Set<DeviceToken>();
         public DbSet<ProblemReport> ProblemReports => Set<ProblemReport>();
         public DbSet<Event> Events { get; set; }
+        public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
         // New DbSets - Spiritual Content
         public DbSet<Hadith> Hadiths => Set<Hadith>();
@@ -40,8 +41,10 @@ namespace FajrSquad.Infrastructure.Data
             modelBuilder.ApplyConfiguration(new UserSettingsConfiguration());
             modelBuilder.ApplyConfiguration(new EventConfiguration());
 
+            // 🔐 NUOVO
+            modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
 
-            // Additional configurations for existing entities without dedicated config files
+            // Additional ad-hoc configs
             ConfigureDailyMessage(modelBuilder);
             ConfigureDeviceToken(modelBuilder);
             ConfigureProblemReport(modelBuilder);
