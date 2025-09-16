@@ -126,41 +126,35 @@ namespace FajrSquad.API.Controllers
 
         [HttpGet("week")]
         [AllowAnonymous]
-        public async Task<IActionResult> GetPrayerTimesWeek([FromQuery] string? country = null, [FromQuery] string? cityOverride = null)
+        public async Task<IActionResult> GetPrayerTimesWeek([FromQuery] string? country = null,
+                                                    [FromQuery] string? cityOverride = null)
         {
-            var cityFromToken = User?.FindFirstValue("city");
             var city = !string.IsNullOrWhiteSpace(cityOverride) ? cityOverride
-                     : !string.IsNullOrWhiteSpace(cityFromToken) ? cityFromToken
-                     : "Brescia";
+                      : User?.FindFirstValue("city") ?? "Brescia";
+            var countryFinal = !string.IsNullOrWhiteSpace(country) ? country
+                            : (User?.FindFirstValue("country") ?? "Italy");
 
-            var countryFinal = !string.IsNullOrWhiteSpace(country)
-                ? country
-                : (User?.FindFirstValue("country") ?? "Italy");
+            var todayLocal = DateTime.UtcNow.Date; // ok per Aladhan
+            var url = $"https://api.aladhan.com/v1/calendarByCity/{todayLocal:yyyy}/{todayLocal:MM}" +
+                      $"?city={Uri.EscapeDataString(city)}&country={Uri.EscapeDataString(countryFinal)}&method=2";
 
-            var today = DateTime.UtcNow.Date;
-            var results = new List<object>();
+            var json = JObject.Parse(await _httpClient.GetStringAsync(url));
+            var days = (JArray?)json["data"] ?? new JArray();
 
-            for (int i = 0; i < 7; i++)
+            var start = todayLocal.Day - 1;
+            var take = Math.Min(7, days.Count - start);
+
+            var week = new List<object>(take);
+            for (int i = 0; i < take; i++)
             {
-                var date = today.AddDays(i).ToString("dd-MM-yyyy");
-                var url = $"https://api.aladhan.com/v1/timingsByCity?city={Uri.EscapeDataString(city)}&country={Uri.EscapeDataString(countryFinal)}&method=2&date={date}";
-                try
-                {
-                    var response = await _httpClient.GetStringAsync(url);
-                    var json = JObject.Parse(response);
-                    var fajr = json["data"]?["timings"]?["Fajr"]?.ToString();
-                    results.Add(new { date, fajr });
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Errore API Aladhan {date}: {ex.Message}");
-                    results.Add(new { date, fajr = (string?)null });
-                }
+                var d = days[start + i];
+                var fajr = d["timings"]?["Fajr"]?.ToString();
+                var greg = d["date"]?["gregorian"]?["date"]?.ToString(); // es. "16-09-2025"
+                week.Add(new { date = greg, fajr });
             }
 
-            return Ok(new { city, country = countryFinal, week = results });
+            return Ok(new { city, country = countryFinal, week });
         }
-
 
 
     }
