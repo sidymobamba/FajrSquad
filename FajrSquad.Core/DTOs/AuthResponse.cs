@@ -20,12 +20,13 @@ namespace FajrSquad.Core.DTOs
 
     public class UserSummaryDto
     {
-        public string Id { get; set; } = string.Empty;        // tienilo string per compatibilità
-        public string Name { get; set; } = string.Empty;
+        public string Id { get; set; } = default!;
+        public string Name { get; set; } = default!;
         public string? Email { get; set; }
-        public string Phone { get; set; } = string.Empty;
-        public string City { get; set; } = string.Empty;
-        public string Role { get; set; } = "User";
-        public string? Avatar { get; set; }                   // es. ProfilePicture
+        public string Phone { get; set; } = default!;
+        public string City { get; set; } = default!;
+        public string Country { get; set; } = default!; 
+        public string Role { get; set; } = default!;
+        public string? Avatar { get; set; }
     }
 }

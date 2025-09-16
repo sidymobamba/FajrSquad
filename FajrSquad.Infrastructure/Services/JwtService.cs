@@ -24,6 +24,7 @@ namespace FajrSquad.Infrastructure.Services
                 new Claim("phone", user.Phone),
                 new Claim(ClaimTypes.Role, user.Role ?? "User"),
                 new Claim("city", user.City ?? "Roma"),
+                new("country", user.Country)
             };
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));

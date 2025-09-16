@@ -29,23 +29,21 @@ namespace FajrSquad.Core.DTOs
     // ===== Auth: register / login =====
     public class RegisterRequest
     {
-        [Required(ErrorMessage = "Il nome è obbligatorio")]
-        [StringLength(100, MinimumLength = 2)]
+        [Required, StringLength(100, MinimumLength = 2)]
         public string Name { get; set; } = string.Empty;
 
-        [EmailAddress]
-        public string? Email { get; set; }
+        [EmailAddress] public string? Email { get; set; }
 
-        [Required(ErrorMessage = "Il telefono è obbligatorio")]
-        [Phone]
-        public string Phone { get; set; } = string.Empty;
+        [Required, Phone] public string Phone { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "La città è obbligatoria")]
-        [StringLength(50, MinimumLength = 2)]
+        [Required, StringLength(50, MinimumLength = 2)]
         public string City { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Il PIN è obbligatorio")]
-        [StringLength(4, MinimumLength = 4)]
+        // 👇 NUOVO
+        [Required, StringLength(56, MinimumLength = 2)]
+        public string Country { get; set; } = string.Empty;
+
+        [Required, StringLength(4, MinimumLength = 4)]
         [RegularExpression(@"^\d{4}$", ErrorMessage = "Il PIN deve contenere solo numeri")]
         public string Pin { get; set; } = string.Empty;
     }
@@ -55,14 +53,16 @@ namespace FajrSquad.Core.DTOs
         [Required, StringLength(100, MinimumLength = 2)]
         public string Name { get; set; } = string.Empty;
 
-        [EmailAddress]
-        public string? Email { get; set; }
+        [EmailAddress] public string? Email { get; set; }
 
-        [Required, Phone]
-        public string Phone { get; set; } = string.Empty;
+        [Required, Phone] public string Phone { get; set; } = string.Empty;
 
         [Required, StringLength(50, MinimumLength = 2)]
         public string City { get; set; } = string.Empty;
+
+        // 👇 NUOVO
+        [Required, StringLength(56, MinimumLength = 2)]
+        public string Country { get; set; } = string.Empty;
 
         [Required, StringLength(6, MinimumLength = 6)]
         public string Otp { get; set; } = string.Empty;
@@ -70,6 +70,7 @@ namespace FajrSquad.Core.DTOs
         [StringLength(100)]
         public string? MotivatingBrother { get; set; }
     }
+
 
     public class LoginRequest
     {
@@ -112,11 +113,14 @@ namespace FajrSquad.Core.DTOs
         [StringLength(100, MinimumLength = 2)]
         public string? Name { get; set; }
 
-        [EmailAddress]
-        public string? Email { get; set; }
+        [EmailAddress] public string? Email { get; set; }
 
         [StringLength(50, MinimumLength = 2)]
         public string? City { get; set; }
+
+        // 👇 NUOVO (opzionale, aggiornabile)
+        [StringLength(56, MinimumLength = 2)]
+        public string? Country { get; set; }
 
         public string? Role { get; set; }
     }

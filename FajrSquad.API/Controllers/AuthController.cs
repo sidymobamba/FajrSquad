@@ -59,6 +59,7 @@ namespace FajrSquad.API.Controllers
                     Email = user.Email,
                     Phone = user.Phone,
                     City = user.City,
+                    Country = user.Country, 
                     Role = user.Role,
                     Avatar = user.ProfilePicture
                 }
@@ -112,6 +113,7 @@ namespace FajrSquad.API.Controllers
                 Email = request.Email,
                 Phone = request.Phone,
                 City = request.City,
+                Country = request.Country, // 👈 SALVATO
                 PasswordHash = hashedPassword,
                 Role = "User"
             };
@@ -243,7 +245,7 @@ namespace FajrSquad.API.Controllers
         public async Task<IActionResult> GetUsers()
         {
             var users = await _db.Users
-                .Select(u => new { u.Id, u.Name, u.Email, u.Phone, u.City, u.Role })
+                .Select(u => new { u.Id, u.Name, u.Email, u.Phone, u.City, u.Country, u.Role }) // 👈
                 .ToListAsync();
             return Ok(users);
         }
@@ -296,6 +298,7 @@ namespace FajrSquad.API.Controllers
                 user.Email,
                 user.Phone,
                 user.City,
+                user.Country, 
                 user.Role,
                 user.ProfilePicture
             });
@@ -314,12 +317,14 @@ namespace FajrSquad.API.Controllers
             user.Name = request.Name ?? user.Name;
             user.City = request.City ?? user.City;
             user.Email = request.Email ?? user.Email;
+            if (!string.IsNullOrWhiteSpace(request.Country)) user.Country = request.Country; 
 
             _db.Users.Update(user);
             await _db.SaveChangesAsync();
 
-            return Ok(new { user.Id, user.Name, user.Email, user.City });
+            return Ok(new { user.Id, user.Name, user.Email, user.City, user.Country });
         }
+
 
         [Authorize]
         [HttpDelete("/api/user")]
@@ -351,12 +356,13 @@ namespace FajrSquad.API.Controllers
             user.Name = request.Name ?? user.Name;
             user.City = request.City ?? user.City;
             user.Email = request.Email ?? user.Email;
+            if (!string.IsNullOrWhiteSpace(request.Country)) user.Country = request.Country; 
             user.Role = request.Role ?? user.Role;
 
             _db.Users.Update(user);
             await _db.SaveChangesAsync();
 
-            return Ok(new { user.Id, user.Name, user.Email, user.City, user.Role });
+            return Ok(new { user.Id, user.Name, user.Email, user.City, user.Country, user.Role });
         }
 
         [Authorize(Roles = "Admin")]
