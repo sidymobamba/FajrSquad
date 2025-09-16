@@ -155,7 +155,7 @@ string[] allowedOrigins = !string.IsNullOrWhiteSpace(originsFromEnv)
     ? originsFromEnv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
     : new[]
     {
-        "http://localhost:8100",
+        "http://localhost:8101",
         "http://localhost:4200",
         "capacitor://localhost",
         "ionic://localhost"
