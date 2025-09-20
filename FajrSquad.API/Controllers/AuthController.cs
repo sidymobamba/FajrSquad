@@ -366,6 +366,21 @@ namespace FajrSquad.API.Controllers
         }
 
         [Authorize(Roles = "Admin")]
+        [HttpPost("/api/admin/users/{id}/make-admin")]
+        public async Task<IActionResult> MakeAdmin(Guid id)
+        {
+            var u = await _db.Users.FindAsync(id); if (u == null) return NotFound();
+            u.Role = "Admin"; await _db.SaveChangesAsync(); return Ok(new { ok = true, u.Id, u.Role });
+        }
+        [Authorize(Roles = "Admin")]
+        [HttpPost("/api/admin/users/{id}/make-user")]
+        public async Task<IActionResult> MakeUser(Guid id)
+        {
+            var u = await _db.Users.FindAsync(id); if (u == null) return NotFound();
+            u.Role = "User"; await _db.SaveChangesAsync(); return Ok(new { ok = true, u.Id, u.Role });
+        }
+
+        [Authorize(Roles = "Admin")]
         [HttpDelete("/api/admin/users/{id}")]
         public async Task<IActionResult> DeleteUser(Guid id)
         {
