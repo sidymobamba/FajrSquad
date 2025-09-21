@@ -1,8 +1,9 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
-using System.Net.Http;
-using System.Security.Claims;
+using FajrSquad.Core.DTOs.FajrSquad.API.Models.Prayers;
+using FajrSquad.Core.DTOs;
 
 namespace FajrSquad.API.Controllers
 {
@@ -10,152 +11,237 @@ namespace FajrSquad.API.Controllers
     [Route("api/[controller]")]
     public class PrayerTimesController : ControllerBase
     {
-        private readonly HttpClient _httpClient;
+        private readonly HttpClient _http;
 
         public PrayerTimesController(IHttpClientFactory httpClientFactory)
         {
-            _httpClient = httpClientFactory.CreateClient();
+            _http = httpClientFactory.CreateClient();
         }
 
+        // ---------- Helpers ----------
+        private static string? Claim(ClaimsPrincipal u, string type) => u.FindFirstValue(type);
+
+        private static (string city, string country) ResolvePlace(ClaimsPrincipal user, string? cityOverride, string? countryOverride)
+        {
+            var city = !string.IsNullOrWhiteSpace(cityOverride) ? cityOverride : Claim(user, "city");
+            var country = !string.IsNullOrWhiteSpace(countryOverride) ? countryOverride : (Claim(user, "country") ?? "Italy");
+
+            if (string.IsNullOrWhiteSpace(city))
+                throw new ArgumentException("City non disponibile (né nel token né in query).");
+
+            return (city!, country!);
+        }
+
+        private static PrayerTimesDto MapTimings(JToken timings)
+        {
+            string Get(string key) => timings[key]?.ToString() ?? "";
+
+            return new PrayerTimesDto
+            {
+                Fajr = Get("Fajr"),
+                Sunrise = Get("Sunrise"),
+                Dhuhr = Get("Dhuhr"),
+                Asr = Get("Asr"),
+                Maghrib = Get("Maghrib"),
+                Isha = Get("Isha"),
+                Imsak = timings["Imsak"]?.ToString(),
+                Midnight = timings["Midnight"]?.ToString()
+            };
+        }
+
+        // ---------- TODAY ----------
         [Authorize]
         [HttpGet("today")]
-        public async Task<IActionResult> GetPrayerTimesToday([FromQuery] string? country = null, [FromQuery] string? cityOverride = null)
+        public async Task<IActionResult> GetToday(
+            [FromQuery] int method = 3,    // 3 = MWL (default)
+            [FromQuery] int school = 0,    // 0 = Standard
+            [FromQuery] string? cityOverride = null,
+            [FromQuery] string? country = null)
         {
             try
             {
-                var city = !string.IsNullOrWhiteSpace(cityOverride)
-                    ? cityOverride
-                    : User.FindFirstValue("city");
+                var (city, countryFinal) = ResolvePlace(User, cityOverride, country);
 
-                if (string.IsNullOrWhiteSpace(city))
-                    return BadRequest(new { error = "La città non è disponibile (manca nel token e non è stata passata in query)." });
+                var url =
+                    $"https://api.aladhan.com/v1/timingsByCity" +
+                    $"?city={Uri.EscapeDataString(city)}" +
+                    $"&country={Uri.EscapeDataString(countryFinal)}" +
+                    $"&method={method}&school={school}";
 
-                var countryFinal = !string.IsNullOrWhiteSpace(country)
-                    ? country
-                    : (User.FindFirstValue("country") ?? "Italy");
+                var res = await _http.GetAsync(url);
+                if (!res.IsSuccessStatusCode)
+                    return StatusCode(502, new { error = "Errore chiamando Aladhan (today)." });
 
-                var today = DateTime.UtcNow.Date;
-                var todayUrl =
-                    $"https://api.aladhan.com/v1/timingsByCity?city={Uri.EscapeDataString(city)}&country={Uri.EscapeDataString(countryFinal)}&method=2";
-                var response = await _httpClient.GetAsync(todayUrl);
-                if (!response.IsSuccessStatusCode)
-                    return StatusCode(500, new { error = "Errore durante la chiamata all'API Aladhan (oggi)." });
+                var json = JObject.Parse(await res.Content.ReadAsStringAsync());
+                var data = json["data"]!;
+                var tz = data["meta"]?["timezone"]?.ToString() ?? "UTC";
+                var timings = MapTimings(data["timings"]!);
 
-                var content = await response.Content.ReadAsStringAsync();
-                var json = JObject.Parse(content);
-
-                var timings = json["data"]?["timings"];
-                var timezoneStr = json["data"]?["meta"]?["timezone"]?.ToString();
-                if (timings == null || timezoneStr == null)
-                    return BadRequest(new { error = "Dati non trovati nella risposta dell'API." });
-
-                var tzInfo = TimeZoneInfo.FindSystemTimeZoneById(timezoneStr);
-                var nowUtc = DateTimeOffset.UtcNow;
-
-                var prayerNames = new[] { "Fajr", "Dhuhr", "Asr", "Maghrib", "Isha" };
-                var prayerTimes = new Dictionary<string, string>();
-                DateTimeOffset? nextPrayerTime = null;
-                string? nextPrayerName = null;
-
-                foreach (var name in prayerNames)
+                // prossimo salah (best-effort su orari HH:mm)
+                var names = new[] { "Fajr", "Dhuhr", "Asr", "Maghrib", "Isha" };
+                string? nextName = null, nextTime = null;
+                try
                 {
-                    var timeStr = timings[name]?.ToString();
-                    if (timeStr == null) continue;
+                    var now = TimeZoneInfo.ConvertTime(DateTime.UtcNow,
+                        TimeZoneInfo.FindSystemTimeZoneById(tz));
 
-                    var localDateTime = DateTime.SpecifyKind(today, DateTimeKind.Unspecified);
-                    var dt = DateTimeOffset.Parse($"{localDateTime:yyyy-MM-dd}T{timeStr}:00");
-                    var zoned = TimeZoneInfo.ConvertTime(dt, tzInfo);
-
-                    prayerTimes[name] = zoned.ToLocalTime().ToString("HH:mm");
-
-                    if (nextPrayerTime == null && zoned > nowUtc)
+                    foreach (var n in names)
                     {
-                        nextPrayerTime = zoned;
-                        nextPrayerName = name;
+                        var t = data["timings"]?[n]?.ToString();
+                        if (string.IsNullOrWhiteSpace(t)) continue;
+
+                        var parts = t.Split(':');
+                        if (parts.Length < 2) continue;
+
+                        var local = new DateTime(now.Year, now.Month, now.Day,
+                            int.Parse(parts[0]), int.Parse(parts[1]), 0, DateTimeKind.Unspecified);
+
+                        if (local > now)
+                        {
+                            nextName = n;
+                            nextTime = local.ToString("HH:mm");
+                            break;
+                        }
                     }
                 }
+                catch { /* safe fallback */ }
 
-                var countdown = nextPrayerTime.HasValue ? (nextPrayerTime.Value - nowUtc) : TimeSpan.Zero;
-
-                var tomorrow = today.AddDays(1).ToString("dd-MM-yyyy");
-                var tomorrowUrl =
-                    $"https://api.aladhan.com/v1/timingsByCity?city={Uri.EscapeDataString(city)}&country={Uri.EscapeDataString(countryFinal)}&method=2&date={tomorrow}";
-
-                DateTimeOffset? nextFajrTime = null;
-                var fajrResponse = await _httpClient.GetAsync(tomorrowUrl);
-                if (fajrResponse.IsSuccessStatusCode)
+                // Fajr domani
+                string? nextFajr = null;
+                try
                 {
-                    var fajrContent = await fajrResponse.Content.ReadAsStringAsync();
-                    var fajrJson = JObject.Parse(fajrContent);
-                    var fajrStr = fajrJson["data"]?["timings"]?["Fajr"]?.ToString();
-                    if (!string.IsNullOrWhiteSpace(fajrStr))
+                    var tomorrow = DateTime.UtcNow.Date.AddDays(1).ToString("dd-MM-yyyy");
+                    var tUrl =
+                        $"https://api.aladhan.com/v1/timingsByCity?date={tomorrow}" +
+                        $"&city={Uri.EscapeDataString(city)}&country={Uri.EscapeDataString(countryFinal)}" +
+                        $"&method={method}&school={school}";
+                    var tRes = await _http.GetAsync(tUrl);
+                    if (tRes.IsSuccessStatusCode)
                     {
-                        var localDateTime = DateTime.SpecifyKind(today.AddDays(1), DateTimeKind.Unspecified);
-                        var dt = DateTimeOffset.Parse($"{localDateTime:yyyy-MM-dd}T{fajrStr}:00");
-                        nextFajrTime = TimeZoneInfo.ConvertTime(dt, tzInfo);
+                        var tJson = JObject.Parse(await tRes.Content.ReadAsStringAsync());
+                        nextFajr = tJson["data"]?["timings"]?["Fajr"]?.ToString();
                     }
                 }
+                catch { }
 
-                var nextFajrCountdown = nextFajrTime.HasValue ? (nextFajrTime.Value - nowUtc) : TimeSpan.Zero;
-
-                return Ok(new
+                var payload = new PrayerTodayResponse
                 {
-                    city,
-                    country = countryFinal, 
-                    date = today.ToString("yyyy-MM-dd"),
-                    timezone = timezoneStr,
-                    prayers = prayerTimes,
-                    nextPrayer = nextPrayerTime == null ? null : new
-                    {
-                        name = nextPrayerName,
-                        time = nextPrayerTime.Value.ToLocalTime().ToString("HH:mm"),
-                        countdown = new { hours = (int)countdown.TotalHours, minutes = countdown.Minutes, seconds = countdown.Seconds }
-                    },
-                    nextFajr = nextFajrTime == null ? null : new
-                    {
-                        time = nextFajrTime.Value.ToLocalTime().ToString("HH:mm"),
-                        countdown = new { hours = (int)nextFajrCountdown.TotalHours, minutes = nextFajrCountdown.Minutes, seconds = nextFajrCountdown.Seconds }
-                    }
-                });
+                    City = city,
+                    Country = countryFinal,
+                    Date = DateTime.UtcNow.Date.ToString("yyyy-MM-dd"),
+                    Timezone = tz,
+                    Prayers = timings,
+                    NextPrayerName = nextName,
+                    NextPrayerTime = nextTime,
+                    NextFajrTime = nextFajr
+                };
+
+                return Ok(payload);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Errore interno del server", details = ex.Message });
+                return StatusCode(500, new { error = "Errore interno server", details = ex.Message });
             }
         }
 
+        // ---------- WEEK / INTERVAL ----------
+        [Authorize]
         [HttpGet("week")]
-        [AllowAnonymous]
-        public async Task<IActionResult> GetPrayerTimesWeek([FromQuery] string? country = null,
-                                                    [FromQuery] string? cityOverride = null)
+        public async Task<IActionResult> GetWeek(
+            [FromQuery] int method = 3,               // default MWL
+            [FromQuery] int school = 0,               // default Standard
+            [FromQuery] string? start = null,         // yyyy-MM-dd
+            [FromQuery] int offset = 0,               // giorni da oggi
+            [FromQuery] int days = 7,                 // quanti giorni (1..14)
+            [FromQuery] string? cityOverride = null,
+            [FromQuery] string? country = null)
         {
-            var city = !string.IsNullOrWhiteSpace(cityOverride) ? cityOverride
-                      : User?.FindFirstValue("city") ?? "Brescia";
-            var countryFinal = !string.IsNullOrWhiteSpace(country) ? country
-                            : (User?.FindFirstValue("country") ?? "Italy");
-
-            var todayLocal = DateTime.UtcNow.Date; // ok per Aladhan
-            var url = $"https://api.aladhan.com/v1/calendarByCity/{todayLocal:yyyy}/{todayLocal:MM}" +
-                      $"?city={Uri.EscapeDataString(city)}&country={Uri.EscapeDataString(countryFinal)}&method=2";
-
-            var json = JObject.Parse(await _httpClient.GetStringAsync(url));
-            var days = (JArray?)json["data"] ?? new JArray();
-
-            var start = todayLocal.Day - 1;
-            var take = Math.Min(7, days.Count - start);
-
-            var week = new List<object>(take);
-            for (int i = 0; i < take; i++)
+            try
             {
-                var d = days[start + i];
-                var fajr = d["timings"]?["Fajr"]?.ToString();
-                var greg = d["date"]?["gregorian"]?["date"]?.ToString(); // es. "16-09-2025"
-                week.Add(new { date = greg, fajr });
+                var (city, countryFinal) = ResolvePlace(User, cityOverride, country);
+
+                // calcolo start date
+                DateTime startDateUtc;
+                if (!string.IsNullOrWhiteSpace(start) && DateTime.TryParse(start, out var parsed))
+                    startDateUtc = parsed.Date;
+                else
+                    startDateUtc = DateTime.UtcNow.Date.AddDays(offset);
+
+                days = Math.Clamp(days, 1, 14);
+
+                // Aladhan calendar è mensile: dobbiamo chiamare i mesi necessari
+                var monthsToFetch = new HashSet<(int y, int m)>();
+                var cursor = startDateUtc;
+                for (int i = 0; i < days; i++)
+                {
+                    monthsToFetch.Add((cursor.Year, cursor.Month));
+                    cursor = cursor.AddDays(1);
+                }
+
+                // Scarico e indicizzo per giorno
+                var monthCache = new Dictionary<(int y, int m), JArray>();
+                foreach (var (y, m) in monthsToFetch)
+                {
+                    var url =
+                        $"https://api.aladhan.com/v1/calendarByCity/{y}/{m:00}" +
+                        $"?city={Uri.EscapeDataString(city)}&country={Uri.EscapeDataString(countryFinal)}" +
+                        $"&method={method}&school={school}";
+                    var json = JObject.Parse(await _http.GetStringAsync(url));
+                    monthCache[(y, m)] = (JArray?)json["data"] ?? new JArray();
+                }
+
+                // build risposta
+                var daysOut = new List<PrayerDayDto>(days);
+                var it = startDateUtc;
+                for (int i = 0; i < days; i++, it = it.AddDays(1))
+                {
+                    var arr = monthCache[(it.Year, it.Month)];
+                    var idx = it.Day - 1;
+                    if (idx < 0 || idx >= arr.Count) continue;
+
+                    var d = arr[idx];
+                    var timings = d["timings"]!;
+                    var hijri = d["date"]?["hijri"]?["date"]?.ToString() ?? "";
+                    var greg = d["date"]?["gregorian"]?["date"]?.ToString() ?? "";
+                    var tz = d["meta"]?["timezone"]?.ToString() ??
+                             d["meta"]?["timezoneName"]?.ToString() ?? "UTC";
+
+                    daysOut.Add(new PrayerDayDto
+                    {
+                        Gregorian = greg,
+                        Hijri = hijri,
+                        WeekdayEn = d["date"]?["gregorian"]?["weekday"]?["en"]?.ToString(),
+                        WeekdayAr = d["date"]?["hijri"]?["weekday"]?["ar"]?.ToString(),
+                        Prayers = MapTimings(timings),
+                        Timezone = tz
+                    });
+                }
+
+                var resp = new PrayerWeekResponse
+                {
+                    City = city,
+                    Country = countryFinal,
+                    Method = method,
+                    School = school,
+                    RangeStart = startDateUtc.ToString("yyyy-MM-dd"),
+                    RangeEnd = startDateUtc.AddDays(days - 1).ToString("yyyy-MM-dd"),
+                    Days = daysOut
+                };
+
+                return Ok(resp);
             }
-
-            return Ok(new { city, country = countryFinal, week });
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Errore interno server", details = ex.Message });
+            }
         }
-
-
     }
 }

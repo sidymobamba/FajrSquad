@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FajrSquad.Core.DTOs.FajrSquad.API.Models.Prayers;
 
 namespace FajrSquad.Core.DTOs
 {
@@ -69,5 +70,28 @@ namespace FajrSquad.Core.DTOs
         public int TotalPages => PageSize > 0 ? (int)Math.Ceiling((double)TotalCount / PageSize) : 0;
         public bool HasNextPage => PageNumber < TotalPages;
         public bool HasPreviousPage => PageNumber > 1;
+    }
+
+    public sealed class PrayerWeekResponse
+    {
+        public string City { get; set; } = "";
+        public string Country { get; set; } = "";
+        public int Method { get; set; }
+        public int School { get; set; }
+        public string RangeStart { get; set; } = ""; // yyyy-MM-dd
+        public string RangeEnd { get; set; } = "";   // yyyy-MM-dd
+        public List<PrayerDayDto> Days { get; set; } = new();
+    }
+
+    public sealed class PrayerTodayResponse
+    {
+        public string City { get; set; } = "";
+        public string Country { get; set; } = "";
+        public string Date { get; set; } = ""; // yyyy-MM-dd
+        public string Timezone { get; set; } = "";
+        public PrayerTimesDto Prayers { get; set; } = new();
+        public string? NextPrayerName { get; set; }
+        public string? NextPrayerTime { get; set; } // HH:mm locale
+        public string? NextFajrTime { get; set; }   // HH:mm locale (domani)
     }
 }

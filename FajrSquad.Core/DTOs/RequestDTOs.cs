@@ -171,4 +171,35 @@ namespace FajrSquad.Core.DTOs
         public string? RefreshToken { get; set; }
         // oppure logout globale: basta userId dal JWT
     }
-}
+
+   
+        public sealed class PrayerTimesDto
+        {
+            public string Fajr { get; set; } = "";
+            public string Sunrise { get; set; } = "";
+            public string Dhuhr { get; set; } = "";
+            public string Asr { get; set; } = "";
+            public string Maghrib { get; set; } = "";
+            public string Isha { get; set; } = "";
+            // opzionali utili
+            public string? Imsak { get; set; }
+            public string? Midnight { get; set; }
+        }
+
+        public sealed class PrayerDayDto
+        {
+            /// <summary>Data gregoriana (DD-MM-YYYY, come torna Aladhan)</summary>
+            public string Gregorian { get; set; } = "";
+            /// <summary>Data hijri (DD-MM-YYYY)</summary>
+            public string Hijri { get; set; } = "";
+            /// <summary>Nome giorno localizzato da Aladhan (en/ar)</summary>
+            public string? WeekdayEn { get; set; }
+            public string? WeekdayAr { get; set; }
+            public PrayerTimesDto Prayers { get; set; } = new();
+            public string Timezone { get; set; } = "";
+        }
+
+        
+    }
+
+
