@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using FajrSquad.Core.DTOs.FajrSquad.API.Models.Prayers;
 
 namespace FajrSquad.Core.DTOs
 {
