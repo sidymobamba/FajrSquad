@@ -2,7 +2,6 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
-using FajrSquad.Core.DTOs.FajrSquad.API.Models.Prayers;
 using FajrSquad.Core.DTOs;
 
 namespace FajrSquad.API.Controllers
