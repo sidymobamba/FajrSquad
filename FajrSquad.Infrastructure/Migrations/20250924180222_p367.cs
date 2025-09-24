@@ -4,10 +4,12 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
+#pragma warning disable CA1814 // Prefer jagged arrays over multidimensional
+
 namespace FajrSquad.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class a34 : Migration
+    public partial class p367 : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -23,6 +25,27 @@ namespace FajrSquad.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_DailyMessages", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Events",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    Location = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
+                    StartDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    EndDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    Organizer = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    IsDeleted = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Events", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -110,6 +133,7 @@ namespace FajrSquad.Infrastructure.Migrations
                     Email = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
                     PasswordHash = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
                     City = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    Country = table.Column<string>(type: "character varying(56)", maxLength: 56, nullable: false),
                     Role = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false, defaultValue: "User"),
                     MotivatingBrother = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     FajrStreak = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
@@ -133,7 +157,16 @@ namespace FajrSquad.Infrastructure.Migrations
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Token = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false)
+                    Token = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: false),
+                    Platform = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "Android"),
+                    Language = table.Column<string>(type: "character varying(10)", maxLength: 10, nullable: false, defaultValue: "it"),
+                    TimeZone = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false, defaultValue: "Africa/Dakar"),
+                    AppVersion = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: true),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    IsDeleted = table.Column<bool>(type: "boolean", nullable: false),
+                    DeletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -155,6 +188,7 @@ namespace FajrSquad.Infrastructure.Migrations
                     Date = table.Column<DateTime>(type: "date", nullable: false),
                     Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                     Notes = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    CheckInAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     IsDeleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
@@ -169,6 +203,37 @@ namespace FajrSquad.Infrastructure.Migrations
                         principalTable: "Users",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "NotificationLogs",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Type = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    PayloadJson = table.Column<string>(type: "text", nullable: false, defaultValue: "{}"),
+                    Result = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false, defaultValue: "Sent"),
+                    ProviderMessageId = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    Error = table.Column<string>(type: "text", nullable: true),
+                    CollapsibleKey = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    SentAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    Retried = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "boolean", nullable: false),
+                    DeletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_NotificationLogs", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_NotificationLogs_Users_UserId",
+                        column: x => x.UserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -217,6 +282,93 @@ namespace FajrSquad.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "RefreshTokens",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Token = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Expires = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    CreatedByIp = table.Column<string>(type: "text", nullable: true),
+                    Revoked = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    RevokedByIp = table.Column<string>(type: "text", nullable: true),
+                    ReplacedByToken = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_RefreshTokens", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_RefreshTokens_Users_UserId",
+                        column: x => x.UserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ScheduledNotifications",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Type = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    ExecuteAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    DataJson = table.Column<string>(type: "text", nullable: false, defaultValue: "{}"),
+                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "Pending"),
+                    UniqueKey = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    ProcessedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    ErrorMessage = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "boolean", nullable: false),
+                    DeletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ScheduledNotifications", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ScheduledNotifications_Users_UserId",
+                        column: x => x.UserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "UserNotificationPreferences",
+                columns: table => new
+                {
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Morning = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    Evening = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    FajrMissed = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    Escalation = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    HadithDaily = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    MotivationDaily = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    EventsNew = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    EventsReminder = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    QuietHoursStart = table.Column<TimeSpan>(type: "interval", nullable: true),
+                    QuietHoursEnd = table.Column<TimeSpan>(type: "interval", nullable: true),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "boolean", nullable: false),
+                    DeletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserNotificationPreferences", x => x.UserId);
+                    table.ForeignKey(
+                        name: "FK_UserNotificationPreferences_Users_UserId",
+                        column: x => x.UserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "UserSettings",
                 columns: table => new
                 {
@@ -257,15 +409,34 @@ namespace FajrSquad.Infrastructure.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.InsertData(
+                table: "Events",
+                columns: new[] { "Id", "CreatedAt", "Description", "EndDate", "IsActive", "IsDeleted", "Location", "Organizer", "StartDate", "Title", "UpdatedAt" },
+                values: new object[,]
+                {
+                    { new Guid("11111111-1111-1111-1111-111111111111"), new DateTime(2025, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Un momento insieme per rafforzare la fede e iniziare la giornata con Fajr in moschea.", new DateTime(2025, 9, 10, 7, 0, 0, 0, DateTimeKind.Utc), true, false, "Moschea Centrale Milano", "Fajr Squad Italia", new DateTime(2025, 9, 10, 5, 30, 0, 0, DateTimeKind.Utc), "Incontro Fajr Squad - Milano", new DateTime(2025, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { new Guid("22222222-2222-2222-2222-222222222222"), new DateTime(2025, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Giornata di trekking e riflessione spirituale con i fratelli del gruppo.", new DateTime(2025, 9, 15, 18, 0, 0, 0, DateTimeKind.Utc), true, false, "Monte Isola, Lago d’Iseo", "Fajr Squad Brescia", new DateTime(2025, 9, 15, 8, 0, 0, 0, DateTimeKind.Utc), "Escursione Spirituale", new DateTime(2025, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc) }
+                });
+
             migrationBuilder.CreateIndex(
                 name: "IX_DailyMessages_Date",
                 table: "DailyMessages",
                 column: "Date");
 
             migrationBuilder.CreateIndex(
+                name: "IX_DeviceTokens_IsActive",
+                table: "DeviceTokens",
+                column: "IsActive");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_DeviceTokens_UserId",
                 table: "DeviceTokens",
-                column: "UserId",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_DeviceTokens_UserId_Token",
+                table: "DeviceTokens",
+                columns: new[] { "UserId", "Token" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -315,6 +486,26 @@ namespace FajrSquad.Infrastructure.Migrations
                 columns: new[] { "Type", "Language", "IsActive" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_NotificationLogs_Result",
+                table: "NotificationLogs",
+                column: "Result");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_NotificationLogs_SentAt",
+                table: "NotificationLogs",
+                column: "SentAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_NotificationLogs_Type",
+                table: "NotificationLogs",
+                column: "Type");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_NotificationLogs_UserId",
+                table: "NotificationLogs",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_OtpCodes_ExpiresAt",
                 table: "OtpCodes",
                 column: "ExpiresAt");
@@ -332,6 +523,17 @@ namespace FajrSquad.Infrastructure.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_ProblemReports_UserId",
                 table: "ProblemReports",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RefreshTokens_Token",
+                table: "RefreshTokens",
+                column: "Token",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RefreshTokens_UserId",
+                table: "RefreshTokens",
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
@@ -358,6 +560,39 @@ namespace FajrSquad.Infrastructure.Migrations
                 name: "IX_Reminders_Type_Language_IsActive",
                 table: "Reminders",
                 columns: new[] { "Type", "Language", "IsActive" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ScheduledNotifications_ExecuteAt",
+                table: "ScheduledNotifications",
+                column: "ExecuteAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ScheduledNotifications_Status",
+                table: "ScheduledNotifications",
+                column: "Status");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ScheduledNotifications_Type",
+                table: "ScheduledNotifications",
+                column: "Type");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ScheduledNotifications_UniqueKey",
+                table: "ScheduledNotifications",
+                column: "UniqueKey",
+                unique: true,
+                filter: "\"UniqueKey\" IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ScheduledNotifications_UserId",
+                table: "ScheduledNotifications",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserNotificationPreferences_UserId",
+                table: "UserNotificationPreferences",
+                column: "UserId",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Users_Email",
@@ -392,6 +627,9 @@ namespace FajrSquad.Infrastructure.Migrations
                 name: "DeviceTokens");
 
             migrationBuilder.DropTable(
+                name: "Events");
+
+            migrationBuilder.DropTable(
                 name: "FajrCheckIns");
 
             migrationBuilder.DropTable(
@@ -401,13 +639,25 @@ namespace FajrSquad.Infrastructure.Migrations
                 name: "Motivations");
 
             migrationBuilder.DropTable(
+                name: "NotificationLogs");
+
+            migrationBuilder.DropTable(
                 name: "OtpCodes");
 
             migrationBuilder.DropTable(
                 name: "ProblemReports");
 
             migrationBuilder.DropTable(
+                name: "RefreshTokens");
+
+            migrationBuilder.DropTable(
                 name: "Reminders");
+
+            migrationBuilder.DropTable(
+                name: "ScheduledNotifications");
+
+            migrationBuilder.DropTable(
+                name: "UserNotificationPreferences");
 
             migrationBuilder.DropTable(
                 name: "UserSettings");

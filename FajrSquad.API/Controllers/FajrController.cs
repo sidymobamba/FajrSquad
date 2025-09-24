@@ -309,8 +309,8 @@ namespace FajrSquad.API.Controllers
                         Late = g.Count(x => x.Status == CheckInStatus.Late),
                         // 👇 usa sempre il timestamp reale
                         Times = g.Select(x => x.CheckInAtUtc ?? x.CreatedAt)
-                                 .Where(t => t != null)
-                                 .Select(t => t!)
+                                 .Where(t => t != default(DateTime))
+                                 .Select(t => t)
                     })
                     .ToListAsync();
 

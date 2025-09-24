@@ -82,7 +82,7 @@ builder.Services.AddScoped<INotificationMetricsService, NotificationMetricsServi
 // 🔹 Quartz
 builder.Services.AddQuartz(q =>
 {
-    q.UseMicrosoftDependencyInjectionJobFactory();
+    // UseMicrosoftDependencyInjectionJobFactory() è obsoleto - è già il default
 
     // Legacy jobs (keep for backward compatibility)
     q.ScheduleJob<SendMorningMotivationJob>(t => t

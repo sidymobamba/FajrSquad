@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FajrSquad.Infrastructure.Migrations
 {
     [DbContext(typeof(FajrDbContext))]
-    [Migration("20250911121650_refreshToken")]
-    partial class refreshToken
+    [Migration("20250924180222_p367")]
+    partial class p367
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -55,19 +55,71 @@ namespace FajrSquad.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AppVersion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("it");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Android");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("Africa/Dakar");
+
                     b.Property<string>("Token")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("IX_DeviceTokens_IsActive");
+
                     b.HasIndex("UserId")
-                        .IsUnique()
                         .HasDatabaseName("IX_DeviceTokens_UserId");
+
+                    b.HasIndex("UserId", "Token")
+                        .IsUnique()
+                        .HasDatabaseName("IX_DeviceTokens_UserId_Token");
 
                     b.ToTable("DeviceTokens", (string)null);
                 });
@@ -355,6 +407,85 @@ namespace FajrSquad.Infrastructure.Migrations
                     b.ToTable("Motivations", (string)null);
                 });
 
+            modelBuilder.Entity("FajrSquad.Core.Entities.NotificationLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CollapsibleKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("{}");
+
+                    b.Property<string>("ProviderMessageId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Result")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("Sent");
+
+                    b.Property<int>("Retried")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTimeOffset>("SentAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Result")
+                        .HasDatabaseName("IX_NotificationLogs_Result");
+
+                    b.HasIndex("SentAt")
+                        .HasDatabaseName("IX_NotificationLogs_SentAt");
+
+                    b.HasIndex("Type")
+                        .HasDatabaseName("IX_NotificationLogs_Type");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_NotificationLogs_UserId");
+
+                    b.ToTable("NotificationLogs", (string)null);
+                });
+
             modelBuilder.Entity("FajrSquad.Core.Entities.OtpCode", b =>
                 {
                     b.Property<Guid>("Id")
@@ -589,6 +720,82 @@ namespace FajrSquad.Infrastructure.Migrations
                     b.ToTable("Reminders", (string)null);
                 });
 
+            modelBuilder.Entity("FajrSquad.Core.Entities.ScheduledNotification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DataJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("{}");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("ExecuteAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Pending");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("UniqueKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExecuteAt")
+                        .HasDatabaseName("IX_ScheduledNotifications_ExecuteAt");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("IX_ScheduledNotifications_Status");
+
+                    b.HasIndex("Type")
+                        .HasDatabaseName("IX_ScheduledNotifications_Type");
+
+                    b.HasIndex("UniqueKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ScheduledNotifications_UniqueKey")
+                        .HasFilter("\"UniqueKey\" IS NOT NULL");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_ScheduledNotifications_UserId");
+
+                    b.ToTable("ScheduledNotifications", (string)null);
+                });
+
             modelBuilder.Entity("FajrSquad.Core.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -599,6 +806,11 @@ namespace FajrSquad.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Country")
+                        .IsRequired()
+                        .HasMaxLength(56)
+                        .HasColumnType("character varying(56)");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -673,6 +885,81 @@ namespace FajrSquad.Infrastructure.Migrations
                         .HasDatabaseName("IX_Users_Role");
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("FajrSquad.Core.Entities.UserNotificationPreference", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Escalation")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("Evening")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("EventsNew")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("EventsReminder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("FajrMissed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("HadithDaily")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("Morning")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("MotivationDaily")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<TimeSpan?>("QuietHoursEnd")
+                        .HasColumnType("interval");
+
+                    b.Property<TimeSpan?>("QuietHoursStart")
+                        .HasColumnType("interval");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_UserNotificationPreferences_UserId");
+
+                    b.ToTable("UserNotificationPreferences", (string)null);
                 });
 
             modelBuilder.Entity("FajrSquad.Core.Entities.UserSettings", b =>
@@ -812,20 +1099,32 @@ namespace FajrSquad.Infrastructure.Migrations
 
             modelBuilder.Entity("FajrSquad.Core.Entities.DeviceToken", b =>
                 {
-                    b.HasOne("FajrSquad.Core.Entities.User", null)
-                        .WithMany()
+                    b.HasOne("FajrSquad.Core.Entities.User", "User")
+                        .WithMany("DeviceTokens")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("FajrSquad.Core.Entities.FajrCheckIn", b =>
                 {
                     b.HasOne("FajrSquad.Core.Entities.User", "User")
-                        .WithMany("CheckIns")
+                        .WithMany("FajrCheckIns")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("FajrSquad.Core.Entities.NotificationLog", b =>
+                {
+                    b.HasOne("FajrSquad.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("User");
                 });
@@ -862,6 +1161,27 @@ namespace FajrSquad.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("FajrSquad.Core.Entities.ScheduledNotification", b =>
+                {
+                    b.HasOne("FajrSquad.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("FajrSquad.Core.Entities.UserNotificationPreference", b =>
+                {
+                    b.HasOne("FajrSquad.Core.Entities.User", "User")
+                        .WithMany("UserNotificationPreferences")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("FajrSquad.Core.Entities.UserSettings", b =>
                 {
                     b.HasOne("FajrSquad.Core.Entities.User", "User")
@@ -875,11 +1195,15 @@ namespace FajrSquad.Infrastructure.Migrations
 
             modelBuilder.Entity("FajrSquad.Core.Entities.User", b =>
                 {
-                    b.Navigation("CheckIns");
+                    b.Navigation("DeviceTokens");
+
+                    b.Navigation("FajrCheckIns");
 
                     b.Navigation("RefreshTokens");
 
                     b.Navigation("Settings");
+
+                    b.Navigation("UserNotificationPreferences");
                 });
 #pragma warning restore 612, 618
         }

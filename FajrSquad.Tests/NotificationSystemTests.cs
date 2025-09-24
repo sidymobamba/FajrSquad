@@ -8,7 +8,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace FajrSquad.Tests
 {
-    public class NotificationSystemTests
+    public class NotificationSystemTests : IDisposable
     {
         private readonly Mock<ILogger<MessageBuilder>> _messageBuilderLogger;
         private readonly Mock<ILogger<NotificationPrivacyService>> _privacyLogger;
@@ -47,7 +47,7 @@ namespace FajrSquad.Tests
             };
             var deviceToken = new DeviceToken
             {
-                Id = Guid.NewGuid(),
+                // Id: lasciamo che EF generi l'identity automaticamente
                 UserId = user.Id,
                 Token = "test-token",
                 Language = "it",
@@ -77,7 +77,7 @@ namespace FajrSquad.Tests
             };
             var deviceToken = new DeviceToken
             {
-                Id = Guid.NewGuid(),
+                // Id: lasciamo che EF generi l'identity automaticamente
                 UserId = user.Id,
                 Token = "test-token",
                 Language = "it",
