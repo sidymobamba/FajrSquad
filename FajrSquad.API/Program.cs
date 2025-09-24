@@ -46,6 +46,7 @@ try
     }
     else
     {
+        // Fallback to default credentials (useful for cloud deployments)
         FirebaseApp.Create();
         Console.WriteLine("✅ Firebase Admin SDK initialized with default credentials");
     }
