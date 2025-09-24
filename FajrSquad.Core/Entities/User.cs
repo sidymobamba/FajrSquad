@@ -32,7 +32,6 @@ namespace FajrSquad.Core.Entities
 
         public int FajrStreak { get; set; } = 0;
         public DateTime RegisteredAt { get; set; } = DateTime.UtcNow;
-        [StringLength(500)]
         public string? ProfilePicture { get; set; }
 
         public ICollection<FajrCheckIn> FajrCheckIns { get; set; } = new List<FajrCheckIn>();

@@ -38,6 +38,9 @@ namespace FajrSquad.Infrastructure.Data.EntityConfigurations
             builder.Property(u => u.MotivatingBrother)
                 .HasMaxLength(100);
                 
+            builder.Property(u => u.ProfilePicture)
+                .HasMaxLength(1048576); // 1MB per Base64 (circa 750KB di immagine)
+                
             builder.Property(u => u.FajrStreak)
                 .HasDefaultValue(0);
                 

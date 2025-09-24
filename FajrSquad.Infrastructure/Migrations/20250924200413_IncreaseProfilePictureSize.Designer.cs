@@ -3,6 +3,7 @@ using System;
 using FajrSquad.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FajrSquad.Infrastructure.Migrations
 {
     [DbContext(typeof(FajrDbContext))]
-    partial class FajrDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250924200413_IncreaseProfilePictureSize")]
+    partial class IncreaseProfilePictureSize
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -851,8 +854,8 @@ namespace FajrSquad.Infrastructure.Migrations
                         .HasColumnType("character varying(20)");
 
                     b.Property<string>("ProfilePicture")
-                        .HasMaxLength(1048576)
-                        .HasColumnType("character varying(1048576)");
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("RegisteredAt")
                         .ValueGeneratedOnAdd()
