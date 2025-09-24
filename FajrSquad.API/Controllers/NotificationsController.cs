@@ -236,23 +236,23 @@ namespace FajrSquad.API.Controllers
                     Priority = request.Priority
                 };
 
-                NotificationResult result;
-                if (request.UserId.HasValue)
-                {
-                    result = await _notificationSender.SendToUserAsync(request.UserId.Value, notificationRequest);
-                }
-                else
-                {
-                    result = await _notificationSender.SendToUserAsync(userId, notificationRequest);
-                }
+                // Always send to the current user (from JWT token)
+                var result = await _notificationSender.SendToUserAsync(userId, notificationRequest);
 
                 if (result.Success)
                 {
-                    return Ok(new { message = "Notifica di test inviata con successo", result });
+                    return Ok(new { 
+                        message = "Notifica di test inviata con successo", 
+                        messageId = result.MessageId,
+                        sentTo = userId
+                    });
                 }
                 else
                 {
-                    return BadRequest(new { error = "Errore nell'invio della notifica di test", result });
+                    return BadRequest(new { 
+                        error = "Errore nell'invio della notifica di test", 
+                        details = result.Error 
+                    });
                 }
             }
             catch (Exception ex)
@@ -335,7 +335,6 @@ namespace FajrSquad.API.Controllers
         public string Body { get; set; } = string.Empty;
         
         public Dictionary<string, string>? Data { get; set; }
-        public Guid? UserId { get; set; }
         public FajrSquad.Infrastructure.Services.NotificationPriority Priority { get; set; } = FajrSquad.Infrastructure.Services.NotificationPriority.Normal;
     }
 }

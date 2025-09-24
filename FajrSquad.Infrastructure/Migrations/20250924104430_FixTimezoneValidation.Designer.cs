@@ -3,6 +3,7 @@ using System;
 using FajrSquad.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FajrSquad.Infrastructure.Migrations
 {
     [DbContext(typeof(FajrDbContext))]
-    partial class FajrDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250924104430_FixTimezoneValidation")]
+    partial class FixTimezoneValidation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -753,8 +756,7 @@ namespace FajrSquad.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ErrorMessage")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("ExecuteAt")
                         .HasColumnType("timestamp with time zone");
@@ -762,21 +764,8 @@ namespace FajrSquad.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("MaxRetries")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(3);
-
-                    b.Property<DateTimeOffset?>("NextRetryAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<DateTimeOffset?>("ProcessedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Retries")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -818,16 +807,6 @@ namespace FajrSquad.Infrastructure.Migrations
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("IX_ScheduledNotifications_UserId");
-
-                    b.HasIndex("Status", "ExecuteAt")
-                        .HasDatabaseName("IX_ScheduledNotifications_Status_ExecuteAt");
-
-                    b.HasIndex("Status", "NextRetryAt")
-                        .HasDatabaseName("IX_ScheduledNotifications_Status_NextRetryAt")
-                        .HasFilter("\"NextRetryAt\" IS NOT NULL");
-
-                    b.HasIndex("UserId", "Type", "Status")
-                        .HasDatabaseName("IX_ScheduledNotifications_UserId_Type_Status");
 
                     b.ToTable("ScheduledNotifications", (string)null);
                 });

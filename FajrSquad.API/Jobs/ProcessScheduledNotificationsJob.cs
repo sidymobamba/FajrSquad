@@ -40,9 +40,10 @@ namespace FajrSquad.API.Jobs
                 var notificationsProcessed = 0;
                 var notificationsFailed = 0;
 
-                // Get all pending notifications that should be executed now
+                // Get all pending notifications that should be executed now (including retries)
                 var pendingNotifications = await _db.ScheduledNotifications
-                    .Where(sn => sn.Status == "Pending" && sn.ExecuteAt <= now)
+                    .Where(sn => (sn.Status == "Pending" && sn.ExecuteAt <= now) ||
+                                (sn.Status == "Failed" && sn.NextRetryAt.HasValue && sn.NextRetryAt <= now && sn.Retries < sn.MaxRetries))
                     .OrderBy(sn => sn.ExecuteAt)
                     .Take(100) // Process max 100 at a time to avoid overwhelming the system
                     .ToListAsync();
@@ -61,18 +62,36 @@ namespace FajrSquad.API.Jobs
                         
                         if (result.Success)
                         {
-                            notification.Status = "Sent";
+                            notification.Status = "Succeeded";
+                            notification.ErrorMessage = null;
+                            notification.NextRetryAt = null;
                             notificationsProcessed++;
                             _logger.LogInformation("Successfully processed notification {Id} of type {Type}", 
                                 notification.Id, notification.Type);
                         }
                         else
                         {
-                            notification.Status = "Failed";
+                            notification.Retries++;
+                            
+                            if (notification.Retries >= notification.MaxRetries)
+                            {
+                                notification.Status = "Failed";
+                                notification.NextRetryAt = null;
+                                notificationsFailed++;
+                                _logger.LogError("Failed to process notification {Id} of type {Type} after {Retries} retries: {Error}", 
+                                    notification.Id, notification.Type, notification.Retries, result.Error);
+                            }
+                            else
+                            {
+                                // Schedule retry with exponential backoff
+                                var retryDelay = TimeSpan.FromMinutes(Math.Pow(2, notification.Retries - 1));
+                                notification.Status = "Failed";
+                                notification.NextRetryAt = now.Add(retryDelay);
+                                _logger.LogWarning("Failed to process notification {Id} of type {Type}, retry {Retries}/{MaxRetries} scheduled for {NextRetryAt}: {Error}", 
+                                    notification.Id, notification.Type, notification.Retries, notification.MaxRetries, notification.NextRetryAt, result.Error);
+                            }
+                            
                             notification.ErrorMessage = result.Error;
-                            notificationsFailed++;
-                            _logger.LogError("Failed to process notification {Id} of type {Type}: {Error}", 
-                                notification.Id, notification.Type, result.Error);
                         }
 
                         await _db.SaveChangesAsync();
@@ -103,6 +122,46 @@ namespace FajrSquad.API.Jobs
         {
             try
             {
+                // Validate user exists and has active device tokens
+                if (notification.UserId.HasValue)
+                {
+                    var user = await _db.Users
+                        .Include(u => u.DeviceTokens.Where(dt => dt.IsActive && !dt.IsDeleted))
+                        .Include(u => u.UserNotificationPreferences)
+                        .FirstOrDefaultAsync(u => u.Id == notification.UserId.Value);
+
+                    if (user == null)
+                    {
+                        return new NotificationResult
+                        {
+                            Success = false,
+                            Error = "User not found"
+                        };
+                    }
+
+                    if (!user.DeviceTokens.Any())
+                    {
+                        notification.Status = "SkippedNoActiveDevice";
+                        return new NotificationResult
+                        {
+                            Success = false,
+                            Error = "No active device tokens found"
+                        };
+                    }
+
+                    // Check user preferences
+                    var preferences = user.UserNotificationPreferences?.FirstOrDefault();
+                    if (preferences != null && !ShouldSendNotificationType(notification.Type, preferences))
+                    {
+                        notification.Status = "SkippedUserPreference";
+                        return new NotificationResult
+                        {
+                            Success = false,
+                            Error = "Notification disabled by user preference"
+                        };
+                    }
+                }
+
                 var data = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(notification.DataJson);
                 if (data == null)
                 {
@@ -289,6 +348,28 @@ namespace FajrSquad.API.Jobs
             return await _notificationSender.SendToUserAsync(userId, request);
         }
 
+        private async Task<NotificationResult> ProcessEventNewAsync(ScheduledNotification notification, Dictionary<string, object> data)
+        {
+            if (!data.TryGetValue("UserId", out var userIdObj) || 
+                !data.TryGetValue("EventId", out var eventIdObj))
+                return new NotificationResult { Success = false, Error = "Missing required data" };
+
+            var userId = Guid.Parse(userIdObj.ToString()!);
+            var eventId = Guid.Parse(eventIdObj.ToString()!);
+            
+            var user = await _db.Users
+                .Include(u => u.DeviceTokens.Where(dt => dt.IsActive && !dt.IsDeleted))
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            var eventEntity = await _db.Events.FirstOrDefaultAsync(e => e.Id == eventId);
+
+            if (user?.DeviceTokens?.FirstOrDefault() is not DeviceToken deviceToken || eventEntity == null)
+                return new NotificationResult { Success = false, Error = "User, device token, or event not found" };
+
+            var request = await _messageBuilder.BuildEventNewAsync(eventEntity, user, deviceToken);
+            return await _notificationSender.SendToUserAsync(userId, request);
+        }
+
         private async Task<NotificationResult> ProcessEventReminderAsync(ScheduledNotification notification, Dictionary<string, object> data)
         {
             if (!data.TryGetValue("UserId", out var userIdObj) || 
@@ -311,6 +392,23 @@ namespace FajrSquad.API.Jobs
 
             var request = await _messageBuilder.BuildEventReminderAsync(eventEntity, user, deviceToken, timeUntil);
             return await _notificationSender.SendToUserAsync(userId, request);
+        }
+
+        private bool ShouldSendNotificationType(string notificationType, UserNotificationPreference preferences)
+        {
+            return notificationType switch
+            {
+                "MorningReminder" => preferences.Morning,
+                "EveningReminder" => preferences.Evening,
+                "FajrLateMotivation" => preferences.FajrMissed,
+                "EscalationReminder" => preferences.Escalation,
+                "DailyHadith" => preferences.HadithDaily,
+                "DailyMotivation" => preferences.MotivationDaily,
+                "EventNew" => preferences.EventsNew,
+                "EventReminder" => preferences.EventsReminder,
+                "AdminAlert" => true, // Admin alerts are always sent
+                _ => true // Default to sending unknown types
+            };
         }
     }
 }

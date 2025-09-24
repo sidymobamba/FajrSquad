@@ -96,7 +96,7 @@ namespace FajrSquad.API.Controllers
                         var deviceToken = user.DeviceTokens?.FirstOrDefault();
                         if (deviceToken != null)
                         {
-                            var notificationRequest = await _messageBuilder.BuildEventCreatedAsync(entity, user, deviceToken);
+                            var notificationRequest = await _messageBuilder.BuildEventNewAsync(entity, user, deviceToken);
                             await _notificationSender.SendToUserAsync(user.Id, notificationRequest);
                         }
                     }

@@ -26,6 +26,18 @@ namespace FajrSquad.Infrastructure.Data.EntityConfigurations
             b.Property(x => x.Created)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+            b.Property(x => x.Expires)
+                .IsRequired();
+
+            b.Property(x => x.CreatedByIp)
+                .HasMaxLength(45);
+
+            b.Property(x => x.RevokedByIp)
+                .HasMaxLength(45);
+
+            b.Property(x => x.ReplacedByToken)
+                .HasMaxLength(200);
+
             // relazione 1-N con User
             b.HasOne(x => x.User)
                 .WithMany(u => u.RefreshTokens)

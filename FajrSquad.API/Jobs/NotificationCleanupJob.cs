@@ -1,4 +1,6 @@
-using FajrSquad.Infrastructure.Services;
+using FajrSquad.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Quartz;
 
@@ -7,15 +9,18 @@ namespace FajrSquad.API.Jobs
     [DisallowConcurrentExecution]
     public class NotificationCleanupJob : IJob
     {
-        private readonly INotificationMetricsService _metricsService;
+        private readonly FajrDbContext _db;
         private readonly ILogger<NotificationCleanupJob> _logger;
+        private readonly IConfiguration _configuration;
 
         public NotificationCleanupJob(
-            INotificationMetricsService metricsService,
-            ILogger<NotificationCleanupJob> logger)
+            FajrDbContext db,
+            ILogger<NotificationCleanupJob> logger,
+            IConfiguration configuration)
         {
-            _metricsService = metricsService;
+            _db = db;
             _logger = logger;
+            _configuration = configuration;
         }
 
         public async Task Execute(IJobExecutionContext context)
@@ -24,10 +29,55 @@ namespace FajrSquad.API.Jobs
             {
                 _logger.LogInformation("Starting NotificationCleanupJob execution");
 
-                // Clean up notification logs older than 30 days
-                await _metricsService.CleanupOldLogsAsync(30);
+                var logsRetentionDays = _configuration.GetValue<int>("Notifications:LogsRetentionDays", 30);
+                var scheduledRetentionDays = _configuration.GetValue<int>("Notifications:ScheduledRetentionDays", 7);
 
-                _logger.LogInformation("NotificationCleanupJob completed successfully");
+                var logsCutoffDate = DateTime.UtcNow.AddDays(-logsRetentionDays);
+                var scheduledCutoffDate = DateTime.UtcNow.AddDays(-scheduledRetentionDays);
+
+                // Clean up old notification logs
+                var deletedLogs = await _db.NotificationLogs
+                    .Where(nl => nl.CreatedAt < logsCutoffDate)
+                    .ExecuteDeleteAsync();
+
+                _logger.LogInformation("Cleaned up {Count} old notification logs (older than {Days} days)", 
+                    deletedLogs, logsRetentionDays);
+
+                // Clean up old processed scheduled notifications
+                var deletedScheduled = await _db.ScheduledNotifications
+                    .Where(sn => sn.ProcessedAt.HasValue && 
+                                sn.ProcessedAt < scheduledCutoffDate &&
+                                (sn.Status == "Succeeded" || sn.Status == "Failed" || sn.Status == "Cancelled"))
+                    .ExecuteDeleteAsync();
+
+                _logger.LogInformation("Cleaned up {Count} old scheduled notifications (older than {Days} days)", 
+                    deletedScheduled, scheduledRetentionDays);
+
+                // Clean up orphaned scheduled notifications (no user)
+                var orphanedCount = await _db.ScheduledNotifications
+                    .Where(sn => sn.UserId.HasValue && 
+                                !_db.Users.Any(u => u.Id == sn.UserId.Value && !u.IsDeleted))
+                    .ExecuteDeleteAsync();
+
+                if (orphanedCount > 0)
+                {
+                    _logger.LogWarning("Cleaned up {Count} orphaned scheduled notifications", orphanedCount);
+                }
+
+                // Clean up inactive device tokens (older than 90 days)
+                var inactiveTokensCutoff = DateTime.UtcNow.AddDays(-90);
+                var deletedTokens = await _db.DeviceTokens
+                    .Where(dt => !dt.IsActive && dt.UpdatedAt < inactiveTokensCutoff)
+                    .ExecuteDeleteAsync();
+
+                if (deletedTokens > 0)
+                {
+                    _logger.LogInformation("Cleaned up {Count} inactive device tokens (older than 90 days)", deletedTokens);
+                }
+
+                _logger.LogInformation("NotificationCleanupJob completed successfully. " +
+                    "Logs: {Logs}, Scheduled: {Scheduled}, Orphaned: {Orphaned}, Tokens: {Tokens}",
+                    deletedLogs, deletedScheduled, orphanedCount, deletedTokens);
             }
             catch (Exception ex)
             {
