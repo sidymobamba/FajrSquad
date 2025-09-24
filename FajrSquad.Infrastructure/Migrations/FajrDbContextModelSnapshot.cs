@@ -70,9 +70,7 @@ namespace FajrSquad.Infrastructure.Migrations
                         .HasDefaultValue(true);
 
                     b.Property<bool>("IsDeleted")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Language")
                         .IsRequired()
@@ -116,17 +114,11 @@ namespace FajrSquad.Infrastructure.Migrations
                     b.HasIndex("UserId")
                         .HasDatabaseName("IX_DeviceTokens_UserId");
 
-                    b.HasIndex("UserId", "IsActive")
-                        .HasDatabaseName("IX_DeviceTokens_UserId_IsActive");
-
                     b.HasIndex("UserId", "Token")
                         .IsUnique()
                         .HasDatabaseName("IX_DeviceTokens_UserId_Token");
 
-                    b.ToTable("DeviceTokens", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_DeviceTokens_TimeZone_Length", "LENGTH(\"TimeZone\") >= 3 AND \"TimeZone\" != 'string'");
-                        });
+                    b.ToTable("DeviceTokens", (string)null);
                 });
 
             modelBuilder.Entity("FajrSquad.Core.Entities.Event", b =>
@@ -514,9 +506,7 @@ namespace FajrSquad.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("IsDeleted")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsUsed")
                         .ValueGeneratedOnAdd()
@@ -529,9 +519,7 @@ namespace FajrSquad.Infrastructure.Migrations
                         .HasColumnType("character varying(20)");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("NOW() AT TIME ZONE 'UTC'");
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
@@ -586,22 +574,19 @@ namespace FajrSquad.Infrastructure.Migrations
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<string>("CreatedByIp")
-                        .HasMaxLength(45)
-                        .HasColumnType("character varying(45)");
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("Expires")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ReplacedByToken")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("Revoked")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("RevokedByIp")
-                        .HasMaxLength(45)
-                        .HasColumnType("character varying(45)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Token")
                         .IsRequired()
@@ -753,8 +738,7 @@ namespace FajrSquad.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ErrorMessage")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("ExecuteAt")
                         .HasColumnType("timestamp with time zone");
@@ -762,21 +746,8 @@ namespace FajrSquad.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("MaxRetries")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(3);
-
-                    b.Property<DateTimeOffset?>("NextRetryAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<DateTimeOffset?>("ProcessedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Retries")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -818,16 +789,6 @@ namespace FajrSquad.Infrastructure.Migrations
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("IX_ScheduledNotifications_UserId");
-
-                    b.HasIndex("Status", "ExecuteAt")
-                        .HasDatabaseName("IX_ScheduledNotifications_Status_ExecuteAt");
-
-                    b.HasIndex("Status", "NextRetryAt")
-                        .HasDatabaseName("IX_ScheduledNotifications_Status_NextRetryAt")
-                        .HasFilter("\"NextRetryAt\" IS NOT NULL");
-
-                    b.HasIndex("UserId", "Type", "Status")
-                        .HasDatabaseName("IX_ScheduledNotifications_UserId_Type_Status");
 
                     b.ToTable("ScheduledNotifications", (string)null);
                 });
@@ -929,9 +890,7 @@ namespace FajrSquad.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
@@ -970,9 +929,7 @@ namespace FajrSquad.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<bool>("IsDeleted")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("Morning")
                         .ValueGeneratedOnAdd()
@@ -985,15 +942,13 @@ namespace FajrSquad.Infrastructure.Migrations
                         .HasDefaultValue(true);
 
                     b.Property<TimeSpan?>("QuietHoursEnd")
-                        .HasColumnType("time");
+                        .HasColumnType("interval");
 
                     b.Property<TimeSpan?>("QuietHoursStart")
-                        .HasColumnType("time");
+                        .HasColumnType("interval");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("UserId");
 

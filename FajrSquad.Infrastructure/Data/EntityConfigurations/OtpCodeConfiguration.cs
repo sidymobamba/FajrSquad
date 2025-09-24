@@ -27,13 +27,7 @@ namespace FajrSquad.Infrastructure.Data.EntityConfigurations
                 .HasDefaultValue(false);
 
             builder.Property(o => o.CreatedAt)
-                .HasDefaultValueSql("NOW() AT TIME ZONE 'UTC'");
-
-            builder.Property(o => o.UpdatedAt)
-                .HasDefaultValueSql("NOW() AT TIME ZONE 'UTC'");
-
-            builder.Property(o => o.IsDeleted)
-                .HasDefaultValue(false);
+            .HasDefaultValueSql("NOW() AT TIME ZONE 'UTC'");
 
             // Indexes
             builder.HasIndex(o => new { o.Phone, o.Code, o.IsUsed })
@@ -48,9 +42,6 @@ namespace FajrSquad.Infrastructure.Data.EntityConfigurations
                 .HasForeignKey("Phone")
                 .HasPrincipalKey(u => u.Phone)
                 .OnDelete(DeleteBehavior.SetNull);
-
-            // Query filters for soft delete - matching User's filter
-            builder.HasQueryFilter(o => !o.IsDeleted);
         }
     }
 }

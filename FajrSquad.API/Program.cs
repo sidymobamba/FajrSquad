@@ -2,9 +2,7 @@
 using System.Text.Json.Serialization;
 using FajrSquad.Core.Config;
 using FajrSquad.Infrastructure.Data;
-using FajrSquad.Infrastructure.Data.Seeders;
 using FajrSquad.Infrastructure.Services;
-using FajrSquad.Infrastructure.HealthChecks;
 using FajrSquad.API.Jobs;
 using FajrSquad.Core.Profiles;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -74,30 +72,12 @@ builder.Services.AddScoped<ICacheService, MemoryCacheService>();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<NotificationService>();
 
-// Notification services - Feature flag controlled
-var useFakeSender = configuration.GetValue<bool>("Notifications:UseFakeSender", builder.Environment.IsDevelopment());
-if (useFakeSender)
-{
-    builder.Services.AddScoped<INotificationSender, FakeFcmNotificationSender>();
-    Console.WriteLine("🔧 Using FAKE FCM Notification Sender (Development/Testing)");
-}
-else
-{
-    builder.Services.AddScoped<INotificationSender, FcmNotificationSender>();
-    Console.WriteLine("🚀 Using REAL FCM Notification Sender (Production)");
-}
+// Notification services
+builder.Services.AddScoped<INotificationSender, FcmNotificationSender>();
 builder.Services.AddScoped<IMessageBuilder, MessageBuilder>();
 builder.Services.AddScoped<INotificationScheduler, NotificationScheduler>();
 builder.Services.AddScoped<INotificationPrivacyService, NotificationPrivacyService>();
 builder.Services.AddScoped<INotificationMetricsService, NotificationMetricsService>();
-builder.Services.AddScoped<ITimezoneService, TimezoneService>();
-
-// 🔹 Health Checks
-builder.Services.AddHealthChecks()
-    .AddCheck<NotificationHealthCheck>("notifications");
-
-// 🔹 Database Seeder
-builder.Services.AddHostedService<DatabaseSeeder>();
 
 // 🔹 Quartz
 builder.Services.AddQuartz(q =>
@@ -130,9 +110,13 @@ builder.Services.AddQuartz(q =>
         .WithIdentity("eveningReminder")
         .WithCronSchedule("0 */10 * * * ?")); // Every 10 minutes
 
-    q.ScheduleJob<FajrMissedCheckInJob>(t => t
-        .WithIdentity("fajrMissedCheckIn")
+    q.ScheduleJob<FajrMissCheckJob>(t => t
+        .WithIdentity("fajrMissCheck")
         .WithCronSchedule("0 30 8 * * ?")); // 08:30 daily
+
+    q.ScheduleJob<EscalationMidMorningJob>(t => t
+        .WithIdentity("escalationMidMorning")
+        .WithCronSchedule("0 30 11 * * ?")); // 11:30 daily
 
     q.ScheduleJob<DailyHadithJob>(t => t
         .WithIdentity("dailyHadithNew")
@@ -301,10 +285,36 @@ app.Use(async (context, next) =>
 
 app.MapControllers();
 app.MapHealthChecks("/health");
-app.MapHealthChecks("/health/notifications", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
-{
-    Predicate = check => check.Name == "notifications"
-});
 
+// Notification health check
+app.MapGet("/health/notifications", async (INotificationMetricsService metricsService) =>
+{
+    try
+    {
+        var last24Hours = DateTimeOffset.UtcNow.AddDays(-1);
+        var metrics = await metricsService.GetMetricsAsync(last24Hours, DateTimeOffset.UtcNow);
+        
+        return Results.Ok(new
+        {
+            status = "healthy",
+            last24Hours = new
+            {
+                totalSent = metrics.TotalSent,
+                totalFailed = metrics.TotalFailed,
+                successRate = metrics.SuccessRate,
+                sentByType = metrics.SentByType
+            },
+            timestamp = DateTimeOffset.UtcNow
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(
+            detail: ex.Message,
+            statusCode: 500,
+            title: "Notification system unhealthy"
+        );
+    }
+});
 
 app.Run();

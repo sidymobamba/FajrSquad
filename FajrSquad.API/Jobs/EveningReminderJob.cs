@@ -3,7 +3,6 @@ using FajrSquad.Infrastructure.Data;
 using FajrSquad.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Configuration;
 using Quartz;
 
 namespace FajrSquad.API.Jobs
@@ -16,25 +15,19 @@ namespace FajrSquad.API.Jobs
         private readonly INotificationScheduler _notificationScheduler;
         private readonly FajrDbContext _db;
         private readonly ILogger<EveningReminderJob> _logger;
-        private readonly IConfiguration _configuration;
-        private readonly ITimezoneService _timezoneService;
 
         public EveningReminderJob(
             INotificationSender notificationSender,
             IMessageBuilder messageBuilder,
             INotificationScheduler notificationScheduler,
             FajrDbContext db,
-            ILogger<EveningReminderJob> logger,
-            IConfiguration configuration,
-            ITimezoneService timezoneService)
+            ILogger<EveningReminderJob> logger)
         {
             _notificationSender = notificationSender;
             _messageBuilder = messageBuilder;
             _notificationScheduler = notificationScheduler;
             _db = db;
             _logger = logger;
-            _configuration = configuration;
-            _timezoneService = timezoneService;
         }
 
         public async Task Execute(IJobExecutionContext context)
@@ -64,30 +57,34 @@ namespace FajrSquad.API.Jobs
                             continue;
                         }
 
-                        // Get user's timezone and normalize it
-                        var rawTimezone = user.DeviceTokens?.FirstOrDefault()?.TimeZone;
-                        var timezone = _timezoneService.NormalizeTimezone(rawTimezone);
+                        // Get user's timezone
+                        var timezone = user.DeviceTokens?.FirstOrDefault()?.TimeZone ?? "Africa/Dakar";
                         
-                        // Get ForceWindow setting for Development
-                        var force = _configuration.GetValue<bool>("Notifications:ForceWindow", false);
+                        // Skip if timezone is invalid (e.g., 'string' literal)
+                        if (string.IsNullOrEmpty(timezone) || timezone == "string" || timezone.Length < 3)
+                        {
+                            _logger.LogWarning("Invalid timezone '{Timezone}' for user {UserId}, skipping", timezone, user.Id);
+                            continue;
+                        }
                         
-                        // Helper function to check if within time window
-                        bool WithinWindow(TimeSpan now, TimeSpan target, int toleranceMinutes) =>
-                            Math.Abs((now - target).TotalMinutes) <= toleranceMinutes;
-
-                        var nowLocal = _timezoneService.GetCurrentLocalTime(timezone).TimeOfDay;
-                        var target = TimeSpan.Parse(_configuration["Notifications:EveningTime"] ?? "21:30");
-                        var tolerance = _configuration.GetValue<int>("Notifications:EveningToleranceMinutes", 5);
-
-                        var shouldSend = (preferences?.Evening ?? true) && (force || WithinWindow(nowLocal, target, tolerance));
+                        TimeZoneInfo userTimeZone;
+                        try
+                        {
+                            userTimeZone = TimeZoneInfo.FindSystemTimeZoneById(timezone);
+                        }
+                        catch (TimeZoneNotFoundException)
+                        {
+                            _logger.LogWarning("Timezone '{Timezone}' not found for user {UserId}, using default", timezone, user.Id);
+                            userTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Africa/Dakar");
+                        }
                         
-                        _logger.LogInformation("EveningCheck user={UserId} nowLocal={NowLocal} target={Target} tolerance={Tolerance}m force={Force} send={ShouldSend}",
-                            user.Id, nowLocal, target, tolerance, force, shouldSend);
+                        var userLocalTime = TimeZoneInfo.ConvertTimeFromUtc(currentUtc.DateTime, userTimeZone);
 
-                        if (shouldSend)
+                        // Check if it's evening time for this user (around 21:30 local time)
+                        if (userLocalTime.Hour == 21 && userLocalTime.Minute >= 25 && userLocalTime.Minute <= 35)
                         {
                             // Check if user hasn't already received an evening reminder today
-                            var todayKey = $"evening_reminder_{user.Id}_{currentUtc:yyyyMMdd}";
+                            var todayKey = $"evening_reminder_{user.Id}_{userLocalTime:yyyyMMdd}";
                             var existingNotification = await _db.ScheduledNotifications
                                 .AnyAsync(sn => sn.UniqueKey == todayKey && sn.Status == "Sent");
 
@@ -100,7 +97,7 @@ namespace FajrSquad.API.Jobs
                                     user.Id,
                                     "EveningReminder",
                                     executeAt,
-                                    new { UserId = user.Id, UserLocalTime = nowLocal },
+                                    new { UserId = user.Id, UserLocalTime = userLocalTime },
                                     todayKey
                                 );
 

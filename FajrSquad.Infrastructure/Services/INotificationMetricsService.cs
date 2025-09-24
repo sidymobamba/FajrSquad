@@ -8,8 +8,6 @@ namespace FajrSquad.Infrastructure.Services
         Task<NotificationMetrics> GetMetricsAsync(DateTimeOffset from, DateTimeOffset to);
         Task<NotificationMetrics> GetUserMetricsAsync(Guid userId, DateTimeOffset from, DateTimeOffset to);
         Task CleanupOldLogsAsync(int daysToKeep = 30);
-        Task<object> GetSystemHealthAsync();
-        Task<object> GetNotificationStatsAsync(DateTime from, DateTime to);
     }
 
     public class NotificationMetrics

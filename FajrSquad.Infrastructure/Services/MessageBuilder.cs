@@ -189,28 +189,6 @@ namespace FajrSquad.Infrastructure.Services
             };
         }
 
-        public async Task<NotificationRequest> BuildEventNewAsync(Event eventEntity, User user, DeviceToken deviceToken)
-        {
-            var template = GetTemplate("event_new", deviceToken.Language);
-            var eventTime = eventEntity.StartDate.ToString("HH:mm", CultureInfo.InvariantCulture);
-            
-            return new NotificationRequest
-            {
-                Title = string.Format(template.Title, eventEntity.Title),
-                Body = string.Format(template.Body, eventTime, eventEntity.Location ?? "Online"),
-                Data = new Dictionary<string, string>
-                {
-                    ["action"] = "open_app",
-                    ["screen"] = "event_detail",
-                    ["type"] = "event_new",
-                    ["eventId"] = eventEntity.Id.ToString()
-                },
-                CollapseKey = $"event_new_{eventEntity.Id}",
-                Priority = template.Priority,
-                TtlSeconds = template.TtlSeconds
-            };
-        }
-
         public async Task<NotificationRequest> BuildEventReminderAsync(Event eventEntity, User user, DeviceToken deviceToken, string timeUntil)
         {
             var template = GetTemplate("event_reminder", deviceToken.Language);

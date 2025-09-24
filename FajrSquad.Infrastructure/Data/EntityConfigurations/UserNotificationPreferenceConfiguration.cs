@@ -38,21 +38,6 @@ namespace FajrSquad.Infrastructure.Data.EntityConfigurations
             builder.Property(x => x.EventsReminder)
                 .HasDefaultValue(true);
 
-            builder.Property(x => x.QuietHoursStart)
-                .HasColumnType("time");
-
-            builder.Property(x => x.QuietHoursEnd)
-                .HasColumnType("time");
-
-            builder.Property(x => x.CreatedAt)
-                .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-            builder.Property(x => x.UpdatedAt)
-                .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-            builder.Property(x => x.IsDeleted)
-                .HasDefaultValue(false);
-
             builder.HasOne(x => x.User)
                 .WithMany(u => u.UserNotificationPreferences)
                 .HasForeignKey(x => x.UserId)
@@ -61,9 +46,6 @@ namespace FajrSquad.Infrastructure.Data.EntityConfigurations
             builder.HasIndex(x => x.UserId)
                 .IsUnique()
                 .HasDatabaseName("IX_UserNotificationPreferences_UserId");
-
-            // Query filters for soft delete - matching User's filter
-            builder.HasQueryFilter(x => !x.IsDeleted);
         }
     }
 }

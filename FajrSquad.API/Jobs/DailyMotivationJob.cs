@@ -1,8 +1,7 @@
-using FajrSquad.Core.Entities;
-using FajrSquad.Infrastructure.Data;
 using FajrSquad.Infrastructure.Services;
+using FajrSquad.Infrastructure.Data;
+using FajrSquad.Core.Entities;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Quartz;
 
@@ -11,21 +10,24 @@ namespace FajrSquad.API.Jobs
     [DisallowConcurrentExecution]
     public class DailyMotivationJob : IJob
     {
+        private readonly INotificationSender _notificationSender;
+        private readonly IMessageBuilder _messageBuilder;
+        private readonly INotificationScheduler _notificationScheduler;
         private readonly FajrDbContext _db;
-        private readonly INotificationScheduler _scheduler;
         private readonly ILogger<DailyMotivationJob> _logger;
-        private readonly IConfiguration _configuration;
 
         public DailyMotivationJob(
+            INotificationSender notificationSender,
+            IMessageBuilder messageBuilder,
+            INotificationScheduler notificationScheduler,
             FajrDbContext db,
-            INotificationScheduler scheduler,
-            ILogger<DailyMotivationJob> logger,
-            IConfiguration configuration)
+            ILogger<DailyMotivationJob> logger)
         {
+            _notificationSender = notificationSender;
+            _messageBuilder = messageBuilder;
+            _notificationScheduler = notificationScheduler;
             _db = db;
-            _scheduler = scheduler;
             _logger = logger;
-            _configuration = configuration;
         }
 
         public async Task Execute(IJobExecutionContext context)
@@ -34,82 +36,84 @@ namespace FajrSquad.API.Jobs
             {
                 _logger.LogInformation("Starting DailyMotivationJob execution");
 
-                var users = await _db.Users
-                    .Include(u => u.UserNotificationPreferences)
-                    .Include(u => u.DeviceTokens.Where(dt => dt.IsActive && !dt.IsDeleted))
-                    .Where(u => !u.IsDeleted)
-                    .ToListAsync();
+                var today = DateTime.UtcNow.Date;
+                var notificationsSent = 0;
 
-                var motivations = await _db.Motivations
-                    .Where(m => m.IsActive)
-                    .OrderBy(m => m.Priority)
-                    .ToListAsync();
+                // Get a random motivation for each language
+                var languages = new[] { "it", "fr", "en" };
+                var motivationsByLanguage = new Dictionary<string, Motivation>();
 
-                if (!motivations.Any())
+                foreach (var language in languages)
                 {
-                    _logger.LogWarning("No active motivations found for daily notifications");
-                    return;
+                    var motivation = await _db.Motivations
+                        .Where(m => m.Language == language && m.IsActive && !m.IsDeleted)
+                        .OrderBy(m => m.Priority)
+                        .ThenBy(m => Guid.NewGuid())
+                        .FirstOrDefaultAsync();
+
+                    if (motivation != null)
+                    {
+                        motivationsByLanguage[language] = motivation;
+                    }
                 }
 
-                var random = new Random();
-                var notificationsScheduled = 0;
+                // Get all active users with their device tokens and preferences
+                var users = await _db.Users
+                    .Where(u => !u.IsDeleted)
+                    .Include(u => u.DeviceTokens.Where(dt => dt.IsActive && !dt.IsDeleted))
+                    .Include(u => u.UserNotificationPreferences)
+                    .ToListAsync();
 
                 foreach (var user in users)
                 {
                     try
                     {
+                        // Check if user has daily motivation notifications enabled
                         var preferences = user.UserNotificationPreferences?.FirstOrDefault();
-                        if (preferences?.MotivationDaily != true)
+                        if (preferences != null && !preferences.MotivationDaily)
                         {
-                            _logger.LogDebug("User {UserId} has daily motivation notifications disabled", user.Id);
                             continue;
                         }
 
-                        if (!user.DeviceTokens.Any())
+                        // Get user's language
+                        var userLanguage = user.DeviceTokens?.FirstOrDefault()?.Language ?? "it";
+                        
+                        // Check if we have a motivation for this language
+                        if (!motivationsByLanguage.TryGetValue(userLanguage, out var motivation))
                         {
-                            _logger.LogDebug("User {UserId} has no active device tokens", user.Id);
-                            continue;
+                            // Fallback to Italian
+                            motivationsByLanguage.TryGetValue("it", out motivation);
                         }
 
-                        // Check if user already received a motivation today
-                        var today = DateTimeOffset.UtcNow.Date;
-                        var alreadyReceived = await _db.NotificationLogs
-                            .AnyAsync(nl => nl.UserId == user.Id && 
-                                          nl.Type == "DailyMotivation" && 
-                                          nl.CreatedAt.Date == today);
-
-                        if (alreadyReceived)
+                        if (motivation != null)
                         {
-                            _logger.LogDebug("User {UserId} already received daily motivation today", user.Id);
-                            continue;
-                        }
+                            // Check if user hasn't already received a daily motivation today
+                            var todayKey = $"daily_motivation_{user.Id}_{today:yyyyMMdd}";
+                            var existingNotification = await _db.ScheduledNotifications
+                                .AnyAsync(sn => sn.UniqueKey == todayKey && sn.Status == "Sent");
 
-                        // Select a random motivation
-                        var selectedMotivation = motivations[random.Next(motivations.Count)];
-
-                        // Schedule notification for immediate delivery (or within next few minutes)
-                        var executeAt = DateTimeOffset.UtcNow.AddMinutes(1);
-
-                        var notification = new ScheduledNotification
-                        {
-                            UserId = user.Id,
-                            Type = "DailyMotivation",
-                            ExecuteAt = executeAt,
-                            DataJson = System.Text.Json.JsonSerializer.Serialize(new
+                            if (!existingNotification)
                             {
-                                UserId = user.Id,
-                                MotivationId = selectedMotivation.Id
-                            }),
-                            UniqueKey = $"daily_motivation:{user.Id}:{today:yyyyMMdd}",
-                            MaxRetries = 3
-                        };
+                                // Schedule daily motivation for this user
+                                var executeAt = DateTimeOffset.UtcNow.AddMinutes(1);
+                                
+                                await _notificationScheduler.ScheduleNotificationAsync(
+                                    user.Id,
+                                    "DailyMotivation",
+                                    executeAt,
+                                    new { 
+                                        UserId = user.Id,
+                                        MotivationId = motivation.Id,
+                                        Language = userLanguage
+                                    },
+                                    todayKey
+                                );
 
-                        await _scheduler.ScheduleNotificationAsync(notification.UserId, notification.Type, notification.ExecuteAt, 
-                            System.Text.Json.JsonSerializer.Deserialize<object>(notification.DataJson), notification.UniqueKey);
-                        notificationsScheduled++;
-
-                        _logger.LogInformation("Scheduled daily motivation notification for user {UserId} with motivation {MotivationId}", 
-                            user.Id, selectedMotivation.Id);
+                                notificationsSent++;
+                                _logger.LogInformation("Scheduled daily motivation for user {UserId} in language {Language} at {ExecuteAt}", 
+                                    user.Id, userLanguage, executeAt);
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -117,7 +121,7 @@ namespace FajrSquad.API.Jobs
                     }
                 }
 
-                _logger.LogInformation("DailyMotivationJob completed. Scheduled {Count} notifications", notificationsScheduled);
+                _logger.LogInformation("DailyMotivationJob completed. Scheduled {Count} daily motivation notifications", notificationsSent);
             }
             catch (Exception ex)
             {

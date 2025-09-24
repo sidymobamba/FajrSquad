@@ -1,8 +1,7 @@
-using FajrSquad.Core.Entities;
-using FajrSquad.Infrastructure.Data;
 using FajrSquad.Infrastructure.Services;
+using FajrSquad.Infrastructure.Data;
+using FajrSquad.Core.Entities;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Quartz;
 
@@ -11,21 +10,24 @@ namespace FajrSquad.API.Jobs
     [DisallowConcurrentExecution]
     public class DailyHadithJob : IJob
     {
+        private readonly INotificationSender _notificationSender;
+        private readonly IMessageBuilder _messageBuilder;
+        private readonly INotificationScheduler _notificationScheduler;
         private readonly FajrDbContext _db;
-        private readonly INotificationScheduler _scheduler;
         private readonly ILogger<DailyHadithJob> _logger;
-        private readonly IConfiguration _configuration;
 
         public DailyHadithJob(
+            INotificationSender notificationSender,
+            IMessageBuilder messageBuilder,
+            INotificationScheduler notificationScheduler,
             FajrDbContext db,
-            INotificationScheduler scheduler,
-            ILogger<DailyHadithJob> logger,
-            IConfiguration configuration)
+            ILogger<DailyHadithJob> logger)
         {
+            _notificationSender = notificationSender;
+            _messageBuilder = messageBuilder;
+            _notificationScheduler = notificationScheduler;
             _db = db;
-            _scheduler = scheduler;
             _logger = logger;
-            _configuration = configuration;
         }
 
         public async Task Execute(IJobExecutionContext context)
@@ -34,82 +36,84 @@ namespace FajrSquad.API.Jobs
             {
                 _logger.LogInformation("Starting DailyHadithJob execution");
 
-                var users = await _db.Users
-                    .Include(u => u.UserNotificationPreferences)
-                    .Include(u => u.DeviceTokens.Where(dt => dt.IsActive && !dt.IsDeleted))
-                    .Where(u => !u.IsDeleted)
-                    .ToListAsync();
+                var today = DateTime.UtcNow.Date;
+                var notificationsSent = 0;
 
-                var hadiths = await _db.Hadiths
-                    .Where(h => h.IsActive)
-                    .OrderBy(h => h.Priority)
-                    .ToListAsync();
+                // Get a random hadith for each language
+                var languages = new[] { "it", "fr", "en" };
+                var hadithsByLanguage = new Dictionary<string, Hadith>();
 
-                if (!hadiths.Any())
+                foreach (var language in languages)
                 {
-                    _logger.LogWarning("No active hadiths found for daily notifications");
-                    return;
+                    var hadith = await _db.Hadiths
+                        .Where(h => h.Language == language && h.IsActive && !h.IsDeleted)
+                        .OrderBy(h => h.Priority)
+                        .ThenBy(h => Guid.NewGuid())
+                        .FirstOrDefaultAsync();
+
+                    if (hadith != null)
+                    {
+                        hadithsByLanguage[language] = hadith;
+                    }
                 }
 
-                var random = new Random();
-                var notificationsScheduled = 0;
+                // Get all active users with their device tokens and preferences
+                var users = await _db.Users
+                    .Where(u => !u.IsDeleted)
+                    .Include(u => u.DeviceTokens.Where(dt => dt.IsActive && !dt.IsDeleted))
+                    .Include(u => u.UserNotificationPreferences)
+                    .ToListAsync();
 
                 foreach (var user in users)
                 {
                     try
                     {
+                        // Check if user has daily hadith notifications enabled
                         var preferences = user.UserNotificationPreferences?.FirstOrDefault();
-                        if (preferences?.HadithDaily != true)
+                        if (preferences != null && !preferences.HadithDaily)
                         {
-                            _logger.LogDebug("User {UserId} has daily hadith notifications disabled", user.Id);
                             continue;
                         }
 
-                        if (!user.DeviceTokens.Any())
+                        // Get user's language
+                        var userLanguage = user.DeviceTokens?.FirstOrDefault()?.Language ?? "it";
+                        
+                        // Check if we have a hadith for this language
+                        if (!hadithsByLanguage.TryGetValue(userLanguage, out var hadith))
                         {
-                            _logger.LogDebug("User {UserId} has no active device tokens", user.Id);
-                            continue;
+                            // Fallback to Italian
+                            hadithsByLanguage.TryGetValue("it", out hadith);
                         }
 
-                        // Check if user already received a hadith today
-                        var today = DateTimeOffset.UtcNow.Date;
-                        var alreadyReceived = await _db.NotificationLogs
-                            .AnyAsync(nl => nl.UserId == user.Id && 
-                                          nl.Type == "DailyHadith" && 
-                                          nl.CreatedAt.Date == today);
-
-                        if (alreadyReceived)
+                        if (hadith != null)
                         {
-                            _logger.LogDebug("User {UserId} already received daily hadith today", user.Id);
-                            continue;
-                        }
+                            // Check if user hasn't already received a daily hadith today
+                            var todayKey = $"daily_hadith_{user.Id}_{today:yyyyMMdd}";
+                            var existingNotification = await _db.ScheduledNotifications
+                                .AnyAsync(sn => sn.UniqueKey == todayKey && sn.Status == "Sent");
 
-                        // Select a random hadith
-                        var selectedHadith = hadiths[random.Next(hadiths.Count)];
-
-                        // Schedule notification for immediate delivery (or within next few minutes)
-                        var executeAt = DateTimeOffset.UtcNow.AddMinutes(1);
-
-                        var notification = new ScheduledNotification
-                        {
-                            UserId = user.Id,
-                            Type = "DailyHadith",
-                            ExecuteAt = executeAt,
-                            DataJson = System.Text.Json.JsonSerializer.Serialize(new
+                            if (!existingNotification)
                             {
-                                UserId = user.Id,
-                                HadithId = selectedHadith.Id
-                            }),
-                            UniqueKey = $"daily_hadith:{user.Id}:{today:yyyyMMdd}",
-                            MaxRetries = 3
-                        };
+                                // Schedule daily hadith for this user
+                                var executeAt = DateTimeOffset.UtcNow.AddMinutes(1);
+                                
+                                await _notificationScheduler.ScheduleNotificationAsync(
+                                    user.Id,
+                                    "DailyHadith",
+                                    executeAt,
+                                    new { 
+                                        UserId = user.Id,
+                                        HadithId = hadith.Id,
+                                        Language = userLanguage
+                                    },
+                                    todayKey
+                                );
 
-                        await _scheduler.ScheduleNotificationAsync(notification.UserId, notification.Type, notification.ExecuteAt, 
-                            System.Text.Json.JsonSerializer.Deserialize<object>(notification.DataJson), notification.UniqueKey);
-                        notificationsScheduled++;
-
-                        _logger.LogInformation("Scheduled daily hadith notification for user {UserId} with hadith {HadithId}", 
-                            user.Id, selectedHadith.Id);
+                                notificationsSent++;
+                                _logger.LogInformation("Scheduled daily hadith for user {UserId} in language {Language} at {ExecuteAt}", 
+                                    user.Id, userLanguage, executeAt);
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -117,7 +121,7 @@ namespace FajrSquad.API.Jobs
                     }
                 }
 
-                _logger.LogInformation("DailyHadithJob completed. Scheduled {Count} notifications", notificationsScheduled);
+                _logger.LogInformation("DailyHadithJob completed. Scheduled {Count} daily hadith notifications", notificationsSent);
             }
             catch (Exception ex)
             {

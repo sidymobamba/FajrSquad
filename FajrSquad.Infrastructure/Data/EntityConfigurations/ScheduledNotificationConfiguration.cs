@@ -31,15 +31,6 @@ namespace FajrSquad.Infrastructure.Data.EntityConfigurations
             builder.Property(x => x.UniqueKey)
                 .HasMaxLength(200);
 
-            builder.Property(x => x.ErrorMessage)
-                .HasMaxLength(1000);
-
-            builder.Property(x => x.Retries)
-                .HasDefaultValue(0);
-
-            builder.Property(x => x.MaxRetries)
-                .HasDefaultValue(3);
-
             builder.HasOne(x => x.User)
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
@@ -61,17 +52,6 @@ namespace FajrSquad.Infrastructure.Data.EntityConfigurations
                 .IsUnique()
                 .HasFilter("\"UniqueKey\" IS NOT NULL")
                 .HasDatabaseName("IX_ScheduledNotifications_UniqueKey");
-
-            // Optimized indexes for queue processing
-            builder.HasIndex(x => new { x.Status, x.ExecuteAt })
-                .HasDatabaseName("IX_ScheduledNotifications_Status_ExecuteAt");
-
-            builder.HasIndex(x => new { x.Status, x.NextRetryAt })
-                .HasFilter("\"NextRetryAt\" IS NOT NULL")
-                .HasDatabaseName("IX_ScheduledNotifications_Status_NextRetryAt");
-
-            builder.HasIndex(x => new { x.UserId, x.Type, x.Status })
-                .HasDatabaseName("IX_ScheduledNotifications_UserId_Type_Status");
         }
     }
 }

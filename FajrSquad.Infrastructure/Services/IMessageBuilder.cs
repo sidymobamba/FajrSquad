@@ -11,7 +11,7 @@ namespace FajrSquad.Infrastructure.Services
         Task<NotificationRequest> BuildAdminAlertAsync(User user, int consecutiveMissedDays);
         Task<NotificationRequest> BuildDailyHadithAsync(Hadith hadith, User user, DeviceToken deviceToken);
         Task<NotificationRequest> BuildDailyMotivationAsync(Motivation motivation, User user, DeviceToken deviceToken);
-        Task<NotificationRequest> BuildEventNewAsync(Event eventEntity, User user, DeviceToken deviceToken);
+        Task<NotificationRequest> BuildEventCreatedAsync(Event eventEntity, User user, DeviceToken deviceToken);
         Task<NotificationRequest> BuildEventReminderAsync(Event eventEntity, User user, DeviceToken deviceToken, string timeUntil);
     }
 

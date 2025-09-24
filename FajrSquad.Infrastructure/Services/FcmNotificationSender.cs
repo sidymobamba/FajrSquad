@@ -203,28 +203,6 @@ namespace FajrSquad.Infrastructure.Services
 
         private Message BuildFirebaseMessage(NotificationRequest request, string? token = null, string? topic = null)
         {
-            // Standardize payload format
-            var standardizedData = new Dictionary<string, string>
-            {
-                ["type"] = request.Data?.GetValueOrDefault("type", "Unknown") ?? "Unknown",
-                ["title"] = request.Title,
-                ["body"] = request.Body,
-                ["deeplink"] = request.Data?.GetValueOrDefault("deeplink", "app://notification") ?? "app://notification",
-                ["timestamp"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()
-            };
-
-            // Add any additional data from the request
-            if (request.Data != null)
-            {
-                foreach (var kvp in request.Data)
-                {
-                    if (!standardizedData.ContainsKey(kvp.Key))
-                    {
-                        standardizedData[kvp.Key] = kvp.Value;
-                    }
-                }
-            }
-
             var message = new Message
             {
                 Notification = new Notification
@@ -233,7 +211,7 @@ namespace FajrSquad.Infrastructure.Services
                     Body = request.Body,
                     ImageUrl = request.ImageUrl
                 },
-                Data = standardizedData,
+                Data = request.Data,
                 Android = new AndroidConfig
                 {
                     Priority = request.Priority switch

@@ -34,7 +34,6 @@ namespace FajrSquad.Infrastructure.Data
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-
             // Apply existing configurations
             modelBuilder.ApplyConfiguration(new UserConfiguration());
             modelBuilder.ApplyConfiguration(new FajrCheckInConfiguration());
@@ -51,13 +50,13 @@ namespace FajrSquad.Infrastructure.Data
             modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
             
             // Notification configurations
-            modelBuilder.ApplyConfiguration(new DeviceTokenConfiguration());
             modelBuilder.ApplyConfiguration(new UserNotificationPreferenceConfiguration());
             modelBuilder.ApplyConfiguration(new NotificationLogConfiguration());
             modelBuilder.ApplyConfiguration(new ScheduledNotificationConfiguration());
 
             // Additional ad-hoc configs
             ConfigureDailyMessage(modelBuilder);
+            ConfigureDeviceToken(modelBuilder);
             ConfigureProblemReport(modelBuilder);
 
             base.OnModelCreating(modelBuilder);
@@ -83,6 +82,60 @@ namespace FajrSquad.Infrastructure.Data
             });
         }
 
+        private static void ConfigureDeviceToken(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<DeviceToken>(entity =>
+            {
+                entity.ToTable("DeviceTokens");
+                entity.HasKey(d => d.Id);
+
+                entity.Property(d => d.UserId)
+                    .IsRequired();
+
+                entity.Property(d => d.Token)
+                    .IsRequired()
+                    .HasMaxLength(512);
+
+                entity.Property(d => d.Platform)
+                    .HasMaxLength(20)
+                    .HasDefaultValue("Android");
+
+                entity.Property(d => d.Language)
+                    .HasMaxLength(10)
+                    .HasDefaultValue("it");
+
+                entity.Property(d => d.TimeZone)
+                    .HasMaxLength(100)
+                    .HasDefaultValue("Africa/Dakar");
+
+                entity.Property(d => d.AppVersion)
+                    .HasMaxLength(40);
+
+                entity.Property(d => d.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.Property(d => d.CreatedAt)
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(d => d.UpdatedAt)
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.HasIndex(d => new { d.UserId, d.Token })
+                    .IsUnique()
+                    .HasDatabaseName("IX_DeviceTokens_UserId_Token");
+
+                entity.HasIndex(d => d.UserId)
+                    .HasDatabaseName("IX_DeviceTokens_UserId");
+
+                entity.HasIndex(d => d.IsActive)
+                    .HasDatabaseName("IX_DeviceTokens_IsActive");
+
+                entity.HasOne(d => d.User)
+                    .WithMany(u => u.DeviceTokens)
+                    .HasForeignKey(d => d.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+        }
 
         private static void ConfigureProblemReport(ModelBuilder modelBuilder)
         {
