@@ -35,8 +35,10 @@ namespace FajrSquad.Core.Entities
         [StringLength(500)]
         public string? ProfilePicture { get; set; }
 
-        public ICollection<FajrCheckIn> CheckIns { get; set; } = new List<FajrCheckIn>();
+        public ICollection<FajrCheckIn> FajrCheckIns { get; set; } = new List<FajrCheckIn>();
         public UserSettings? Settings { get; set; }
+        public ICollection<DeviceToken> DeviceTokens { get; set; } = new List<DeviceToken>();
+        public ICollection<UserNotificationPreference> UserNotificationPreferences { get; set; } = new List<UserNotificationPreference>();
 
         [InverseProperty(nameof(RefreshToken.User))]
         public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();

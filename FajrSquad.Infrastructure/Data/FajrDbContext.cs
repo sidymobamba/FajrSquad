@@ -26,6 +26,11 @@ namespace FajrSquad.Infrastructure.Data
 
         // New DbSets - User Management
         public DbSet<UserSettings> UserSettings => Set<UserSettings>();
+        
+        // New DbSets - Notifications
+        public DbSet<UserNotificationPreference> UserNotificationPreferences => Set<UserNotificationPreference>();
+        public DbSet<NotificationLog> NotificationLogs => Set<NotificationLog>();
+        public DbSet<ScheduledNotification> ScheduledNotifications => Set<ScheduledNotification>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -43,6 +48,11 @@ namespace FajrSquad.Infrastructure.Data
 
             // 🔐 NUOVO
             modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
+            
+            // Notification configurations
+            modelBuilder.ApplyConfiguration(new UserNotificationPreferenceConfiguration());
+            modelBuilder.ApplyConfiguration(new NotificationLogConfiguration());
+            modelBuilder.ApplyConfiguration(new ScheduledNotificationConfiguration());
 
             // Additional ad-hoc configs
             ConfigureDailyMessage(modelBuilder);
@@ -84,14 +94,44 @@ namespace FajrSquad.Infrastructure.Data
 
                 entity.Property(d => d.Token)
                     .IsRequired()
-                    .HasMaxLength(500);
+                    .HasMaxLength(512);
+
+                entity.Property(d => d.Platform)
+                    .HasMaxLength(20)
+                    .HasDefaultValue("Android");
+
+                entity.Property(d => d.Language)
+                    .HasMaxLength(10)
+                    .HasDefaultValue("it");
+
+                entity.Property(d => d.TimeZone)
+                    .HasMaxLength(100)
+                    .HasDefaultValue("Africa/Dakar");
+
+                entity.Property(d => d.AppVersion)
+                    .HasMaxLength(40);
+
+                entity.Property(d => d.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.Property(d => d.CreatedAt)
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(d => d.UpdatedAt)
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.HasIndex(d => new { d.UserId, d.Token })
+                    .IsUnique()
+                    .HasDatabaseName("IX_DeviceTokens_UserId_Token");
 
                 entity.HasIndex(d => d.UserId)
-                    .IsUnique()
                     .HasDatabaseName("IX_DeviceTokens_UserId");
 
-                entity.HasOne<User>()
-                    .WithMany()
+                entity.HasIndex(d => d.IsActive)
+                    .HasDatabaseName("IX_DeviceTokens_IsActive");
+
+                entity.HasOne(d => d.User)
+                    .WithMany(u => u.DeviceTokens)
                     .HasForeignKey(d => d.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
             });

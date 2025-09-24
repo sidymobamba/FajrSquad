@@ -43,7 +43,7 @@ namespace FajrSquad.Infrastructure.Data.EntityConfigurations
 
             // Relationships
             builder.HasOne(f => f.User)
-                .WithMany(u => u.CheckIns)
+                .WithMany(u => u.FajrCheckIns)
                 .HasForeignKey(f => f.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 

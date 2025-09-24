@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using FajrSquad.Infrastructure.Data;
 using FajrSquad.Core.DTOs;
 using FajrSquad.Core.Entities;
+using FajrSquad.Infrastructure.Services;
 
 namespace FajrSquad.API.Controllers
 {
@@ -13,11 +14,22 @@ namespace FajrSquad.API.Controllers
     {
         private readonly FajrDbContext _context;
         private readonly ILogger<EventsController> _logger;
+        private readonly INotificationSender _notificationSender;
+        private readonly IMessageBuilder _messageBuilder;
+        private readonly INotificationScheduler _notificationScheduler;
 
-        public EventsController(FajrDbContext context, ILogger<EventsController> logger)
+        public EventsController(
+            FajrDbContext context, 
+            ILogger<EventsController> logger,
+            INotificationSender notificationSender,
+            IMessageBuilder messageBuilder,
+            INotificationScheduler notificationScheduler)
         {
             _context = context;
             _logger = logger;
+            _notificationSender = notificationSender;
+            _messageBuilder = messageBuilder;
+            _notificationScheduler = notificationScheduler;
         }
 
         // GET api/events
@@ -60,6 +72,50 @@ namespace FajrSquad.API.Controllers
 
             await _context.Events.AddAsync(entity);
             await _context.SaveChangesAsync();
+
+            try
+            {
+                // Send immediate event created notification to all users
+                var users = await _context.Users
+                    .Where(u => !u.IsDeleted)
+                    .Include(u => u.DeviceTokens.Where(dt => dt.IsActive && !dt.IsDeleted))
+                    .Include(u => u.UserNotificationPreferences)
+                    .ToListAsync();
+
+                foreach (var user in users)
+                {
+                    try
+                    {
+                        // Check if user has event notifications enabled
+                        var preferences = user.UserNotificationPreferences?.FirstOrDefault();
+                        if (preferences != null && !preferences.EventsNew)
+                        {
+                            continue;
+                        }
+
+                        var deviceToken = user.DeviceTokens?.FirstOrDefault();
+                        if (deviceToken != null)
+                        {
+                            var notificationRequest = await _messageBuilder.BuildEventCreatedAsync(entity, user, deviceToken);
+                            await _notificationSender.SendToUserAsync(user.Id, notificationRequest);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to send event created notification to user {UserId}", user.Id);
+                    }
+                }
+
+                // Schedule event reminders
+                await _notificationScheduler.ScheduleEventRemindersAsync(entity);
+
+                _logger.LogInformation("Event {EventId} created and notifications sent", entity.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending notifications for event {EventId}", entity.Id);
+                // Don't fail the event creation if notifications fail
+            }
 
             return Ok(ApiResponse<object>.SuccessResponse(entity, "Evento creato con successo"));
         }

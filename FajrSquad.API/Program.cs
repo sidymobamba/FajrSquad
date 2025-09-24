@@ -11,6 +11,8 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Quartz;
 using DotNetEnv; // 👈 aggiunto
+using FirebaseAdmin;
+using Google.Apis.Auth.OAuth2;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
@@ -27,6 +29,31 @@ if (builder.Environment.IsDevelopment())
 Console.WriteLine("🌍 Environment: " + builder.Environment.EnvironmentName);
 Console.WriteLine("✅ R2_BUCKET_NAME: " + Environment.GetEnvironmentVariable("R2_BUCKET_NAME"));
 Console.WriteLine("✅ R2_PUBLIC_URL: " + Environment.GetEnvironmentVariable("R2_PUBLIC_URL"));
+
+// 🔹 Firebase Admin SDK Initialization
+try
+{
+    var firebaseCredentialsPath = Environment.GetEnvironmentVariable("FIREBASE_CONFIG");
+    if (!string.IsNullOrEmpty(firebaseCredentialsPath) && File.Exists(firebaseCredentialsPath))
+    {
+        FirebaseApp.Create(new AppOptions()
+        {
+            Credential = GoogleCredential.FromFile(firebaseCredentialsPath)
+        });
+        Console.WriteLine("✅ Firebase Admin SDK initialized with credentials file");
+    }
+    else
+    {
+        // Fallback to default credentials (useful for cloud deployments)
+        FirebaseApp.Create();
+        Console.WriteLine("✅ Firebase Admin SDK initialized with default credentials");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"❌ Firebase initialization failed: {ex.Message}");
+    // Don't fail the app startup, but log the error
+}
 
 // 🔹 Database (SQL Server o PostgreSQL)
 builder.Services.AddDbContext<FajrDbContext>(options =>
@@ -45,11 +72,19 @@ builder.Services.AddScoped<ICacheService, MemoryCacheService>();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<NotificationService>();
 
+// Notification services
+builder.Services.AddScoped<INotificationSender, FcmNotificationSender>();
+builder.Services.AddScoped<IMessageBuilder, MessageBuilder>();
+builder.Services.AddScoped<INotificationScheduler, NotificationScheduler>();
+builder.Services.AddScoped<INotificationPrivacyService, NotificationPrivacyService>();
+builder.Services.AddScoped<INotificationMetricsService, NotificationMetricsService>();
+
 // 🔹 Quartz
 builder.Services.AddQuartz(q =>
 {
     q.UseMicrosoftDependencyInjectionJobFactory();
 
+    // Legacy jobs (keep for backward compatibility)
     q.ScheduleJob<SendMorningMotivationJob>(t => t
         .WithIdentity("morningMotivation")
         .WithCronSchedule("0 0 6 * * ?")); // 06:00
@@ -65,6 +100,43 @@ builder.Services.AddQuartz(q =>
     q.ScheduleJob<SendHadithJob>(t => t
         .WithIdentity("dailyHadith")
         .WithCronSchedule("0 5 14 * * ?")); // 14:05
+
+    // New comprehensive notification jobs
+    q.ScheduleJob<MorningReminderJob>(t => t
+        .WithIdentity("morningReminder")
+        .WithCronSchedule("0 */10 * * * ?")); // Every 10 minutes
+
+    q.ScheduleJob<EveningReminderJob>(t => t
+        .WithIdentity("eveningReminder")
+        .WithCronSchedule("0 */10 * * * ?")); // Every 10 minutes
+
+    q.ScheduleJob<FajrMissCheckJob>(t => t
+        .WithIdentity("fajrMissCheck")
+        .WithCronSchedule("0 30 8 * * ?")); // 08:30 daily
+
+    q.ScheduleJob<EscalationMidMorningJob>(t => t
+        .WithIdentity("escalationMidMorning")
+        .WithCronSchedule("0 30 11 * * ?")); // 11:30 daily
+
+    q.ScheduleJob<DailyHadithJob>(t => t
+        .WithIdentity("dailyHadithNew")
+        .WithCronSchedule("0 0 8 * * ?")); // 08:00 daily
+
+    q.ScheduleJob<DailyMotivationJob>(t => t
+        .WithIdentity("dailyMotivationNew")
+        .WithCronSchedule("0 5 8 * * ?")); // 08:05 daily
+
+    q.ScheduleJob<EventReminderSweepJob>(t => t
+        .WithIdentity("eventReminderSweep")
+        .WithCronSchedule("0 */15 * * * ?")); // Every 15 minutes
+
+    q.ScheduleJob<ProcessScheduledNotificationsJob>(t => t
+        .WithIdentity("processScheduledNotifications")
+        .WithCronSchedule("0 */5 * * * ?")); // Every 5 minutes
+
+    q.ScheduleJob<NotificationCleanupJob>(t => t
+        .WithIdentity("notificationCleanup")
+        .WithCronSchedule("0 0 2 * * ?")); // Daily at 02:00
 });
 builder.Services.AddQuartzHostedService();
 
@@ -213,5 +285,36 @@ app.Use(async (context, next) =>
 
 app.MapControllers();
 app.MapHealthChecks("/health");
+
+// Notification health check
+app.MapGet("/health/notifications", async (INotificationMetricsService metricsService) =>
+{
+    try
+    {
+        var last24Hours = DateTimeOffset.UtcNow.AddDays(-1);
+        var metrics = await metricsService.GetMetricsAsync(last24Hours, DateTimeOffset.UtcNow);
+        
+        return Results.Ok(new
+        {
+            status = "healthy",
+            last24Hours = new
+            {
+                totalSent = metrics.TotalSent,
+                totalFailed = metrics.TotalFailed,
+                successRate = metrics.SuccessRate,
+                sentByType = metrics.SentByType
+            },
+            timestamp = DateTimeOffset.UtcNow
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(
+            detail: ex.Message,
+            statusCode: 500,
+            title: "Notification system unhealthy"
+        );
+    }
+});
 
 app.Run();

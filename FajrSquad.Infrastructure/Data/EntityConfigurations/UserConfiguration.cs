@@ -62,7 +62,7 @@ namespace FajrSquad.Infrastructure.Data.EntityConfigurations
                 .HasDatabaseName("IX_Users_Role");
 
             // Relationships
-            builder.HasMany(u => u.CheckIns)
+            builder.HasMany(u => u.FajrCheckIns)
                 .WithOne(c => c.User)
                 .HasForeignKey(c => c.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
