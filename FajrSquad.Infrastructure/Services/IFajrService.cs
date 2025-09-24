@@ -1,5 +1,6 @@
 ﻿using FajrSquad.Core.DTOs;
 using FajrSquad.Core.Entities;
+using System.Linq;
 
 namespace FajrSquad.Infrastructure.Services
 {
@@ -40,11 +41,12 @@ namespace FajrSquad.Infrastructure.Services
             return new ServiceResult<T>
             {
                 Success = false,
+                ErrorMessage = error,
                 Errors = new[] { error }
             };
         }
 
         public static ServiceResult<T> ValidationErrorResult(List<string> errors)
-            => new() { Success = false, ValidationErrors = errors };
+            => new() { Success = false, ErrorMessage = errors.FirstOrDefault(), ValidationErrors = errors };
     }
 }

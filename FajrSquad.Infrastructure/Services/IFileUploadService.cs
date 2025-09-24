@@ -36,31 +36,57 @@ namespace FajrSquad.Infrastructure.Services
             try
             {
                 _logger.LogInformation("[UploadAvatarAsync] Start upload avatar per UserId={UserId}. FileName={FileName}, ContentType={ContentType}, Size={Size}", userId, file?.FileName, file?.ContentType, file?.Length);
+                
+                if (file == null || file.Length == 0)
+                    return ServiceResult<object>.ErrorResult("Nessun file fornito o file vuoto");
+                
+                if (file.Length > _maxFileSize)
+                    return ServiceResult<object>.ErrorResult($"File troppo grande: {file.Length / 1024 / 1024:F1}MB (massimo 5MB)");
+                
+                var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+                if (!_allowedExtensions.Contains(ext))
+                    return ServiceResult<object>.ErrorResult($"Formato file non supportato: {ext}. Formati supportati: {string.Join(", ", _allowedExtensions)}");
+                
                 if (!IsValidImageFile(file))
                     return ServiceResult<object>.ErrorResult("File non valido. Solo JPG/PNG/GIF fino a 5MB");
 
+                _logger.LogInformation("[UploadAvatarAsync] Inizio eliminazione avatar precedente per UserId={UserId}", userId);
                 await DeleteAvatarAsync(userId);
+                _logger.LogInformation("[UploadAvatarAsync] Eliminazione avatar precedente completata per UserId={UserId}", userId);
 
+                _logger.LogInformation("[UploadAvatarAsync] Inizio conversione file in Base64 per UserId={UserId}", userId);
                 using var ms = new MemoryStream();
                 await file.CopyToAsync(ms);
                 var bytes = ms.ToArray();
                 _logger.LogInformation("[UploadAvatarAsync] Bytes letti: {BytesLength}", bytes.Length);
+                
                 var base64 = Convert.ToBase64String(bytes);
                 var dataUrl = $"data:{file.ContentType};base64,{base64}";
                 var previewLen = Math.Min(dataUrl.Length, 200);
                 var preview = dataUrl.Substring(0, previewLen);
                 _logger.LogInformation("[UploadAvatarAsync] Base64 preview (primi {PreviewLen} chars): {Preview}", previewLen, preview);
                 _logger.LogDebug("[UploadAvatarAsync] Base64 completo (len={Len})", dataUrl.Length);
+                _logger.LogInformation("[UploadAvatarAsync] Conversione Base64 completata per UserId={UserId}", userId);
 
+                _logger.LogInformation("[UploadAvatarAsync] Inizio salvataggio in database per UserId={UserId}", userId);
                 using var scope = _scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<FajrDbContext>();
+                _logger.LogInformation("[UploadAvatarAsync] Database context ottenuto per UserId={UserId}", userId);
+                
                 var user = await db.Users.FindAsync(userId);
+                _logger.LogInformation("[UploadAvatarAsync] Utente trovato: {UserFound} per UserId={UserId}", user != null, userId);
+                
                 if (user != null)
                 {
                     _logger.LogInformation("[UploadAvatarAsync] Salvataggio Base64 in DB per UserId={UserId}", userId);
                     user.ProfilePicture = dataUrl;
+                    _logger.LogInformation("[UploadAvatarAsync] ProfilePicture impostato, inizio SaveChanges per UserId={UserId}", userId);
                     await db.SaveChangesAsync();
                     _logger.LogInformation("[UploadAvatarAsync] Salvataggio completato per UserId={UserId}", userId);
+                }
+                else
+                {
+                    _logger.LogWarning("[UploadAvatarAsync] Utente non trovato per UserId={UserId}", userId);
                 }
 
                 return ServiceResult<object>.SuccessResult(new
@@ -70,8 +96,9 @@ namespace FajrSquad.Infrastructure.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error saving base64 avatar for {UserId}", userId);
-                return ServiceResult<object>.ErrorResult("Errore upload avatar");
+                _logger.LogError(ex, "Error saving base64 avatar for {UserId}. FileName={FileName}, ContentType={ContentType}, Size={Size}", 
+                    userId, file?.FileName, file?.ContentType, file?.Length);
+                return ServiceResult<object>.ErrorResult($"Errore upload avatar: {ex.Message}");
             }
         }
 

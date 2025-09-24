@@ -9,6 +9,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using AutoMapper;
 using Microsoft.Extensions.Configuration;
+using System.Linq;
 
 namespace FajrSquad.API.Controllers
 {
@@ -111,7 +112,11 @@ namespace FajrSquad.API.Controllers
                 return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
             var result = await _fileUploadService.UploadAvatarAsync(file, userId);
-            if (!result.Success) return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
+            if (!result.Success) 
+            {
+                var errorMessage = result.ErrorMessage ?? result.Errors?.FirstOrDefault() ?? "Errore sconosciuto";
+                return BadRequest(ApiResponse<object>.ErrorResponse(errorMessage));
+            }
 
             return Ok(ApiResponse<object>.SuccessResponse(result.Data!, "Avatar caricato con successo"));
         }
@@ -123,7 +128,11 @@ namespace FajrSquad.API.Controllers
                 return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
             var result = await _fileUploadService.UpdateAvatarAsync(file, userId);
-            if (!result.Success) return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
+            if (!result.Success) 
+            {
+                var errorMessage = result.ErrorMessage ?? result.Errors?.FirstOrDefault() ?? "Errore sconosciuto";
+                return BadRequest(ApiResponse<object>.ErrorResponse(errorMessage));
+            }
 
             return Ok(ApiResponse<object>.SuccessResponse(result.Data!, "Avatar aggiornato con successo"));
         }
@@ -135,7 +144,11 @@ namespace FajrSquad.API.Controllers
                 return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
 
             var result = await _fileUploadService.DeleteAvatarAsync(userId);
-            if (!result.Success) return BadRequest(ApiResponse<object>.ErrorResponse(result.ErrorMessage!));
+            if (!result.Success) 
+            {
+                var errorMessage = result.ErrorMessage ?? result.Errors?.FirstOrDefault() ?? "Errore sconosciuto";
+                return BadRequest(ApiResponse<object>.ErrorResponse(errorMessage));
+            }
 
             return Ok(ApiResponse<bool>.SuccessResponse(result.Data, "Avatar eliminato con successo"));
         }

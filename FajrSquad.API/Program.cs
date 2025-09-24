@@ -13,6 +13,8 @@ using Quartz;
 using DotNetEnv; // 👈 aggiunto
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Server.IIS;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
@@ -209,6 +211,20 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     })
     .AddNewtonsoftJson();
+
+// 🔹 Configurazione per file upload
+builder.Services.Configure<IISServerOptions>(options =>
+{
+    options.MaxRequestBodySize = 10 * 1024 * 1024; // 10MB
+});
+
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 10 * 1024 * 1024; // 10MB
+    options.ValueLengthLimit = int.MaxValue;
+    options.ValueCountLimit = int.MaxValue;
+    options.KeyLengthLimit = int.MaxValue;
+});
 
 // 🔹 Extra
 builder.Services.AddHttpClient();
