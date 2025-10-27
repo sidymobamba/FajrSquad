@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using FajrSquad.Core.Config;
 using FajrSquad.Infrastructure.Data;
 using FajrSquad.Infrastructure.Services;
+using FajrSquad.Infrastructure.Services.Adhkar;
 using FajrSquad.API.Jobs;
 using FajrSquad.Core.Profiles;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -73,6 +74,9 @@ builder.Services.AddScoped<IFileUploadService, FileUploadService>();
 builder.Services.AddScoped<ICacheService, MemoryCacheService>();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<NotificationService>();
+
+// Adhkar services
+builder.Services.AddScoped<IAdhkarService, AdhkarService>();
 
 // Notification services
 builder.Services.AddScoped<INotificationSender, FcmNotificationSender>();
@@ -230,7 +234,7 @@ builder.Services.Configure<FormOptions>(options =>
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddHealthChecks();
-builder.Services.AddAutoMapper(typeof(FajrProfile));
+builder.Services.AddAutoMapper(typeof(FajrProfile), typeof(AdhkarProfile));
 
 // 🔹 Logging
 builder.Logging.ClearProviders();

@@ -1,6 +1,8 @@
 using FajrSquad.Core.Entities;
+using FajrSquad.Core.Entities.Adhkar;
 using FajrSquad.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace FajrSquad.Infrastructure.Data
 {
@@ -16,6 +18,9 @@ namespace FajrSquad.Infrastructure.Data
             
             // Seed Islamic Reminders
             await SeedRemindersAsync(context);
+            
+            // Seed Adhkar
+            await SeedAdhkarAsync(context);
             
             await context.SaveChangesAsync();
         }
@@ -278,5 +283,162 @@ namespace FajrSquad.Infrastructure.Data
 
             context.Reminders.AddRange(reminders);
         }
+
+        private static async Task SeedAdhkarAsync(FajrDbContext context)
+        {
+            try
+            {
+                var jsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "content", "adhkar_master.json");
+                if (!File.Exists(jsonPath))
+                {
+                    Console.WriteLine($"Adhkar seed file not found at: {jsonPath}");
+                    return;
+                }
+
+                var jsonContent = await File.ReadAllTextAsync(jsonPath);
+                var adhkarData = JsonSerializer.Deserialize<List<AdhkarSeedData>>(jsonContent);
+
+                if (adhkarData == null) return;
+
+                foreach (var data in adhkarData)
+                {
+                    // Check if Adhkar already exists
+                    var existingAdhkar = await context.Adhkar.FirstOrDefaultAsync(a => a.Code == data.Code);
+                    if (existingAdhkar != null) continue;
+
+                    var adhkar = new Adhkar
+                    {
+                        Code = data.Code,
+                        Categories = data.Categories,
+                        Priority = data.Priority,
+                        Repetitions = data.Repetitions,
+                        SourceBook = data.SourceBook,
+                        SourceRef = data.SourceRef,
+                        License = data.License,
+                        ContentHash = data.ContentHash,
+                        Visible = data.Visible,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                        UpdatedAt = DateTimeOffset.UtcNow
+                    };
+
+                    context.Adhkar.Add(adhkar);
+                    await context.SaveChangesAsync(); // Save to get the ID
+
+                    // Add texts
+                    foreach (var textData in data.Texts)
+                    {
+                        var text = new AdhkarText
+                        {
+                            AdhkarId = adhkar.Id,
+                            Lang = textData.Lang,
+                            TextAr = textData.TextAr,
+                            Transliteration = textData.Transliteration,
+                            Translation = textData.Translation
+                        };
+                        context.AdhkarTexts.Add(text);
+                    }
+                }
+
+                // Create default sets if they don't exist
+                await CreateDefaultSetsAsync(context);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error seeding Adhkar: {ex.Message}");
+            }
+        }
+
+        private static async Task CreateDefaultSetsAsync(FajrDbContext context)
+        {
+            // Morning set
+            var morningSet = await context.AdhkarSets.FirstOrDefaultAsync(s => s.Code == "morning_default");
+            if (morningSet == null)
+            {
+                morningSet = new AdhkarSet
+                {
+                    Code = "morning_default",
+                    TitleIt = "Adhkar del Mattino",
+                    Type = "morning",
+                    Ord = 1
+                };
+                context.AdhkarSets.Add(morningSet);
+                await context.SaveChangesAsync();
+
+                // Add morning adhkar to the set
+                var morningAdhkar = await context.Adhkar
+                    .Where(a => a.Categories.Contains("morning"))
+                    .OrderBy(a => a.Priority)
+                    .ToListAsync();
+
+                for (int i = 0; i < morningAdhkar.Count; i++)
+                {
+                    var item = new AdhkarSetItem
+                    {
+                        SetId = morningSet.Id,
+                        AdhkarId = morningAdhkar[i].Id,
+                        Ord = i + 1,
+                        Repetitions = morningAdhkar[i].Repetitions
+                    };
+                    context.AdhkarSetItems.Add(item);
+                }
+            }
+
+            // Evening set
+            var eveningSet = await context.AdhkarSets.FirstOrDefaultAsync(s => s.Code == "evening_default");
+            if (eveningSet == null)
+            {
+                eveningSet = new AdhkarSet
+                {
+                    Code = "evening_default",
+                    TitleIt = "Adhkar della Sera",
+                    Type = "evening",
+                    Ord = 1,
+                    EveningStart = "Asr",
+                    EveningEnd = "Midnight"
+                };
+                context.AdhkarSets.Add(eveningSet);
+                await context.SaveChangesAsync();
+
+                // Add evening adhkar to the set
+                var eveningAdhkar = await context.Adhkar
+                    .Where(a => a.Categories.Contains("evening"))
+                    .OrderBy(a => a.Priority)
+                    .ToListAsync();
+
+                for (int i = 0; i < eveningAdhkar.Count; i++)
+                {
+                    var item = new AdhkarSetItem
+                    {
+                        SetId = eveningSet.Id,
+                        AdhkarId = eveningAdhkar[i].Id,
+                        Ord = i + 1,
+                        Repetitions = eveningAdhkar[i].Repetitions
+                    };
+                    context.AdhkarSetItems.Add(item);
+                }
+            }
+        }
+    }
+
+    public class AdhkarSeedData
+    {
+        public string Code { get; set; } = default!;
+        public string[] Categories { get; set; } = Array.Empty<string>();
+        public int Priority { get; set; }
+        public int Repetitions { get; set; }
+        public string? SourceBook { get; set; }
+        public string? SourceRef { get; set; }
+        public string? License { get; set; }
+        public string ContentHash { get; set; } = default!;
+        public bool Visible { get; set; }
+        public List<AdhkarTextSeedData> Texts { get; set; } = new();
+    }
+
+    public class AdhkarTextSeedData
+    {
+        public string Lang { get; set; } = default!;
+        public string? TextAr { get; set; }
+        public string? Transliteration { get; set; }
+        public string? Translation { get; set; }
     }
 }

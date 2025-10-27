@@ -1,6 +1,8 @@
 ﻿using System.Net.Mail;
 using FajrSquad.Core.Entities;
+using FajrSquad.Core.Entities.Adhkar;
 using FajrSquad.Infrastructure.Data.EntityConfigurations;
+using FajrSquad.Infrastructure.Data.EntityConfigurations.Adhkar;
 using Microsoft.EntityFrameworkCore;
 
 namespace FajrSquad.Infrastructure.Data
@@ -32,6 +34,14 @@ namespace FajrSquad.Infrastructure.Data
         public DbSet<NotificationLog> NotificationLogs => Set<NotificationLog>();
         public DbSet<ScheduledNotification> ScheduledNotifications => Set<ScheduledNotification>();
 
+        // New DbSets - Adhkar
+        public DbSet<Adhkar> Adhkar => Set<Adhkar>();
+        public DbSet<AdhkarText> AdhkarTexts => Set<AdhkarText>();
+        public DbSet<AdhkarSet> AdhkarSets => Set<AdhkarSet>();
+        public DbSet<AdhkarSetItem> AdhkarSetItems => Set<AdhkarSetItem>();
+        public DbSet<UserAdhkarProgress> UserAdhkarProgress => Set<UserAdhkarProgress>();
+        public DbSet<UserAdhkarBookmark> UserAdhkarBookmarks => Set<UserAdhkarBookmark>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             // Apply existing configurations
@@ -53,6 +63,14 @@ namespace FajrSquad.Infrastructure.Data
             modelBuilder.ApplyConfiguration(new UserNotificationPreferenceConfiguration());
             modelBuilder.ApplyConfiguration(new NotificationLogConfiguration());
             modelBuilder.ApplyConfiguration(new ScheduledNotificationConfiguration());
+
+            // Adhkar configurations
+            modelBuilder.ApplyConfiguration(new AdhkarConfiguration());
+            modelBuilder.ApplyConfiguration(new AdhkarTextConfiguration());
+            modelBuilder.ApplyConfiguration(new AdhkarSetConfiguration());
+            modelBuilder.ApplyConfiguration(new AdhkarSetItemConfiguration());
+            modelBuilder.ApplyConfiguration(new UserAdhkarProgressConfiguration());
+            modelBuilder.ApplyConfiguration(new UserAdhkarBookmarkConfiguration());
 
             // Additional ad-hoc configs
             ConfigureDailyMessage(modelBuilder);

@@ -1,0 +1,252 @@
+[
+  {
+    "code": "subhanallah_morning",
+    "categories": ["morning"],
+    "priority": 1,
+    "repetitions": 33,
+    "sourceBook": "Sahih Muslim",
+    "sourceRef": "Muslim 2691",
+    "license": "Public Domain",
+    "contentHash": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
+    "visible": true,
+    "texts": [
+      {
+        "lang": "ar",
+        "textAr": "سُبْحَانَ اللَّهِ",
+        "transliteration": "Subhanallah",
+        "translation": "Gloria ad Allah"
+      },
+      {
+        "lang": "it",
+        "textAr": "سُبْحَانَ اللَّهِ",
+        "transliteration": "Subhanallah",
+        "translation": "Gloria ad Allah"
+      }
+    ]
+  },
+  {
+    "code": "alhamdulillah_morning",
+    "categories": ["morning"],
+    "priority": 1,
+    "repetitions": 33,
+    "sourceBook": "Sahih Muslim",
+    "sourceRef": "Muslim 2691",
+    "license": "Public Domain",
+    "contentHash": "b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7",
+    "visible": true,
+    "texts": [
+      {
+        "lang": "ar",
+        "textAr": "الْحَمْدُ لِلَّهِ",
+        "transliteration": "Alhamdulillah",
+        "translation": "Lode ad Allah"
+      },
+      {
+        "lang": "it",
+        "textAr": "الْحَمْدُ لِلَّهِ",
+        "transliteration": "Alhamdulillah",
+        "translation": "Lode ad Allah"
+      }
+    ]
+  },
+  {
+    "code": "allahuakbar_morning",
+    "categories": ["morning"],
+    "priority": 1,
+    "repetitions": 33,
+    "sourceBook": "Sahih Muslim",
+    "sourceRef": "Muslim 2691",
+    "license": "Public Domain",
+    "contentHash": "c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8",
+    "visible": true,
+    "texts": [
+      {
+        "lang": "ar",
+        "textAr": "اللَّهُ أَكْبَرُ",
+        "transliteration": "Allahu Akbar",
+        "translation": "Allah è il più grande"
+      },
+      {
+        "lang": "it",
+        "textAr": "اللَّهُ أَكْبَرُ",
+        "transliteration": "Allahu Akbar",
+        "translation": "Allah è il più grande"
+      }
+    ]
+  },
+  {
+    "code": "ayat_kursi",
+    "categories": ["morning", "evening"],
+    "priority": 1,
+    "repetitions": 1,
+    "sourceBook": "Corano",
+    "sourceRef": "Al-Baqarah 2:255",
+    "license": "Public Domain",
+    "contentHash": "d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9",
+    "visible": true,
+    "texts": [
+      {
+        "lang": "ar",
+        "textAr": "اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ۚ لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ ۚ لَّهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الْأَرْضِ ۗ مَن ذَا الَّذِي يَشْفَعُ عِندَهُ إِلَّا بِإِذْنِهِ ۚ يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ ۖ وَلَا يُحِيطُونَ بِشَيْءٍ مِّنْ عِلْمِهِ إِلَّا بِمَا شَاءَ ۚ وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالْأَرْضَ ۖ وَلَا يَئُودُهُ حِفْظُهُمَا ۚ وَهُوَ الْعَلِيُّ الْعَظِيمُ",
+        "transliteration": "Allahu la ilaha illa huwa al-hayyu al-qayyum, la ta'khudhuhu sinatun wa la nawm, lahu ma fi as-samawati wa ma fi al-ard, man dha alladhi yashfa'u 'indahu illa bi-idhnihi, ya'lamu ma bayna aydihim wa ma khalfahum, wa la yuhituna bi-shay'in min 'ilmihi illa bima sha', wasi'a kursiyyuhu as-samawati wa al-ard, wa la ya'uduhu hifzuhuma, wa huwa al-'aliyyu al-'azim",
+        "translation": "Allah! Non c'è dio all'infuori di Lui, il Vivente, l'Assoluto. Non Lo prendono mai sopore né sonno. A Lui appartiene tutto quello che è nei cieli e sulla terra. Chi può intercedere presso di Lui senza il Suo permesso? Conosce quello che è davanti a loro e quello che è dietro di loro, mentre essi non abbracciano della Sua scienza se non quello che Egli vuole. Il Suo trono si estende sui cieli e sulla terra, il custodirli non Gli pesa. Egli è l'Altissimo, l'Immenso."
+      },
+      {
+        "lang": "it",
+        "textAr": "اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ۚ لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ ۚ لَّهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الْأَرْضِ ۗ مَن ذَا الَّذِي يَشْفَعُ عِندَهُ إِلَّا بِإِذْنِهِ ۚ يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ ۖ وَلَا يُحِيطُونَ بِشَيْءٍ مِّنْ عِلْمِهِ إِلَّا بِمَا شَاءَ ۚ وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالْأَرْضَ ۖ وَلَا يَئُودُهُ حِفْظُهُمَا ۚ وَهُوَ الْعَلِيُّ الْعَظِيمُ",
+        "transliteration": "Allahu la ilaha illa huwa al-hayyu al-qayyum, la ta'khudhuhu sinatun wa la nawm, lahu ma fi as-samawati wa ma fi al-ard, man dha alladhi yashfa'u 'indahu illa bi-idhnihi, ya'lamu ma bayna aydihim wa ma khalfahum, wa la yuhituna bi-shay'in min 'ilmihi illa bima sha', wasi'a kursiyyuhu as-samawati wa al-ard, wa la ya'uduhu hifzuhuma, wa huwa al-'aliyyu al-'azim",
+        "translation": "Allah! Non c'è dio all'infuori di Lui, il Vivente, l'Assoluto. Non Lo prendono mai sopore né sonno. A Lui appartiene tutto quello che è nei cieli e sulla terra. Chi può intercedere presso di Lui senza il Suo permesso? Conosce quello che è davanti a loro e quello che è dietro di loro, mentre essi non abbracciano della Sua scienza se non quello che Egli vuole. Il Suo trono si estende sui cieli e sulla terra, il custodirli non Gli pesa. Egli è l'Altissimo, l'Immenso."
+      }
+    ]
+  },
+  {
+    "code": "subhanallah_evening",
+    "categories": ["evening"],
+    "priority": 1,
+    "repetitions": 33,
+    "sourceBook": "Sahih Muslim",
+    "sourceRef": "Muslim 2691",
+    "license": "Public Domain",
+    "contentHash": "e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0",
+    "visible": true,
+    "texts": [
+      {
+        "lang": "ar",
+        "textAr": "سُبْحَانَ اللَّهِ",
+        "transliteration": "Subhanallah",
+        "translation": "Gloria ad Allah"
+      },
+      {
+        "lang": "it",
+        "textAr": "سُبْحَانَ اللَّهِ",
+        "transliteration": "Subhanallah",
+        "translation": "Gloria ad Allah"
+      }
+    ]
+  },
+  {
+    "code": "alhamdulillah_evening",
+    "categories": ["evening"],
+    "priority": 1,
+    "repetitions": 33,
+    "sourceBook": "Sahih Muslim",
+    "sourceRef": "Muslim 2691",
+    "license": "Public Domain",
+    "contentHash": "f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1",
+    "visible": true,
+    "texts": [
+      {
+        "lang": "ar",
+        "textAr": "الْحَمْدُ لِلَّهِ",
+        "transliteration": "Alhamdulillah",
+        "translation": "Lode ad Allah"
+      },
+      {
+        "lang": "it",
+        "textAr": "الْحَمْدُ لِلَّهِ",
+        "transliteration": "Alhamdulillah",
+        "translation": "Lode ad Allah"
+      }
+    ]
+  },
+  {
+    "code": "allahuakbar_evening",
+    "categories": ["evening"],
+    "priority": 1,
+    "repetitions": 33,
+    "sourceBook": "Sahih Muslim",
+    "sourceRef": "Muslim 2691",
+    "license": "Public Domain",
+    "contentHash": "g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2",
+    "visible": true,
+    "texts": [
+      {
+        "lang": "ar",
+        "textAr": "اللَّهُ أَكْبَرُ",
+        "transliteration": "Allahu Akbar",
+        "translation": "Allah è il più grande"
+      },
+      {
+        "lang": "it",
+        "textAr": "اللَّهُ أَكْبَرُ",
+        "transliteration": "Allahu Akbar",
+        "translation": "Allah è il più grande"
+      }
+    ]
+  },
+  {
+    "code": "la_ilaha_illallah",
+    "categories": ["morning", "evening"],
+    "priority": 1,
+    "repetitions": 100,
+    "sourceBook": "Sahih Bukhari",
+    "sourceRef": "Bukhari 6405",
+    "license": "Public Domain",
+    "contentHash": "h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3",
+    "visible": true,
+    "texts": [
+      {
+        "lang": "ar",
+        "textAr": "لَا إِلَٰهَ إِلَّا اللَّهُ",
+        "transliteration": "La ilaha illa Allah",
+        "translation": "Non c'è dio all'infuori di Allah"
+      },
+      {
+        "lang": "it",
+        "textAr": "لَا إِلَٰهَ إِلَّا اللَّهُ",
+        "transliteration": "La ilaha illa Allah",
+        "translation": "Non c'è dio all'infuori di Allah"
+      }
+    ]
+  },
+  {
+    "code": "astaghfirullah",
+    "categories": ["morning", "evening"],
+    "priority": 2,
+    "repetitions": 100,
+    "sourceBook": "Sahih Bukhari",
+    "sourceRef": "Bukhari 6307",
+    "license": "Public Domain",
+    "contentHash": "i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4",
+    "visible": true,
+    "texts": [
+      {
+        "lang": "ar",
+        "textAr": "أَسْتَغْفِرُ اللَّهَ",
+        "transliteration": "Astaghfirullah",
+        "translation": "Chiedo perdono ad Allah"
+      },
+      {
+        "lang": "it",
+        "textAr": "أَسْتَغْفِرُ اللَّهَ",
+        "transliteration": "Astaghfirullah",
+        "translation": "Chiedo perdono ad Allah"
+      }
+    ]
+  },
+  {
+    "code": "la_hawla_wa_la_quwwata",
+    "categories": ["morning", "evening"],
+    "priority": 2,
+    "repetitions": 100,
+    "sourceBook": "Sahih Bukhari",
+    "sourceRef": "Bukhari 6406",
+    "license": "Public Domain",
+    "contentHash": "j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5",
+    "visible": true,
+    "texts": [
+      {
+        "lang": "ar",
+        "textAr": "لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ",
+        "transliteration": "La hawla wa la quwwata illa billah",
+        "translation": "Non c'è potere né forza se non con Allah"
+      },
+      {
+        "lang": "it",
+        "textAr": "لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ",
+        "transliteration": "La hawla wa la quwwata illa billah",
+        "translation": "Non c'è potere né forza se non con Allah"
+      }
+    ]
+  }
+]
