@@ -98,4 +98,40 @@ namespace FajrSquad.Core.DTOs.Adhkar
         [StringLength(500)]
         public string? Note { get; set; }
     }
+    public class CreateAdhkarRequest
+    {
+        [Required] public string Code { get; set; } = default!;
+        [Required] public string[] Categories { get; set; } = Array.Empty<string>();
+        public int Priority { get; set; } = 100;
+        public int Repetitions { get; set; } = 1;
+        public string? SourceBook { get; set; }
+        public string? SourceRef { get; set; }
+        public string? License { get; set; }
+        public bool Visible { get; set; } = true;
+    }
+
+    public class UpsertAdhkarTextRequest
+    {
+        [Required] public string Lang { get; set; } = default!; // "ar","it","en","fr"
+        public string? TextAr { get; set; }
+        public string? Transliteration { get; set; }
+        public string? Translation { get; set; }
+    }
+
+    public class CreateAdhkarSetRequest
+    {
+        [Required] public string Code { get; set; } = default!;          // es. morning_default
+        [Required] public string TitleIt { get; set; } = default!;
+        [Required] public string Type { get; set; } = default!;           // morning|evening|after_prayer|sleep
+        public int Ord { get; set; } = 1;
+        public string? EveningStart { get; set; } // opzionale
+        public string? EveningEnd { get; set; }   // opzionale
+    }
+
+    public class AddAdhkarSetItemRequest
+    {
+        [Required] public string AdhkarCode { get; set; } = default!;
+        [Range(1, 999)] public int Ord { get; set; } = 1;
+        [Range(1, 999)] public int Repetitions { get; set; } = 1;
+    }
 }
