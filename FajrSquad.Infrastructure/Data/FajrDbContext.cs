@@ -1,5 +1,6 @@
 ﻿using System.Net.Mail;
 using FajrSquad.Core.Entities;
+using FajrSquad.Core.Entities.Adhkar;
 using FajrSquad.Infrastructure.Data.EntityConfigurations;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,6 +24,12 @@ namespace FajrSquad.Infrastructure.Data
         public DbSet<Hadith> Hadiths => Set<Hadith>();
         public DbSet<Motivation> Motivations => Set<Motivation>();
         public DbSet<Reminder> Reminders => Set<Reminder>();
+        
+        // Adhkar DbSets
+        public DbSet<FajrSquad.Core.Entities.Adhkar.Adhkar> Adhkar => Set<FajrSquad.Core.Entities.Adhkar.Adhkar>();
+        public DbSet<FajrSquad.Core.Entities.Adhkar.UserAdhkarProgress> UserAdhkarProgress => Set<FajrSquad.Core.Entities.Adhkar.UserAdhkarProgress>();
+        public DbSet<FajrSquad.Core.Entities.Adhkar.UserAdhkarFavorite> UserAdhkarFavorites => Set<FajrSquad.Core.Entities.Adhkar.UserAdhkarFavorite>();
+        public DbSet<FajrSquad.Core.Entities.Adhkar.UserAdhkarStats> UserAdhkarStats => Set<FajrSquad.Core.Entities.Adhkar.UserAdhkarStats>();
 
         // New DbSets - User Management
         public DbSet<UserSettings> UserSettings => Set<UserSettings>();
@@ -45,6 +52,12 @@ namespace FajrSquad.Infrastructure.Data
             modelBuilder.ApplyConfiguration(new ReminderConfiguration());
             modelBuilder.ApplyConfiguration(new UserSettingsConfiguration());
             modelBuilder.ApplyConfiguration(new EventConfiguration());
+            
+            // Adhkar configurations
+            modelBuilder.ApplyConfiguration(new AdhkarConfiguration());
+            modelBuilder.ApplyConfiguration(new UserAdhkarProgressConfiguration());
+            modelBuilder.ApplyConfiguration(new UserAdhkarFavoriteConfiguration());
+            modelBuilder.ApplyConfiguration(new UserAdhkarStatsConfiguration());
 
             // 🔐 NUOVO
             modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());

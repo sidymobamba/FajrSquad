@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using FajrSquad.Infrastructure.Data;
+using FajrSquad.Core.DTOs;
 using System.Security.Claims;
 
 namespace FajrSquad.API.Controllers
@@ -150,6 +151,28 @@ namespace FajrSquad.API.Controllers
             {
                 _logger.LogError(ex, "Error testing timezone");
                 return StatusCode(500, new { error = "Error testing timezone", details = ex.Message });
+            }
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("seed-adhkar")]
+        public async Task<IActionResult> SeedAdhkar()
+        {
+            try
+            {
+                await IslamicDataSeeder.SeedAsync(_context);
+                
+                var adhkarCount = await _context.Adhkar.CountAsync();
+                
+                return Ok(ApiResponse<object>.SuccessResponse(
+                    new { message = "Adhkar seeded successfully", count = adhkarCount },
+                    $"Seeder eseguito con successo. {adhkarCount} adhkar nel database."
+                ));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error seeding adhkar");
+                return StatusCode(500, ApiResponse<object>.ErrorResponse($"Errore durante il seeding: {ex.Message}"));
             }
         }
     }

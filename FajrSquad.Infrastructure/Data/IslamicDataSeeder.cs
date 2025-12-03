@@ -1,4 +1,5 @@
 using FajrSquad.Core.Entities;
+using FajrSquad.Core.Entities.Adhkar;
 using FajrSquad.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,6 +17,9 @@ namespace FajrSquad.Infrastructure.Data
             
             // Seed Islamic Reminders
             await SeedRemindersAsync(context);
+            
+            // Seed Adhkar
+            await SeedAdhkarAsync(context);
             
             await context.SaveChangesAsync();
         }
@@ -277,6 +281,301 @@ namespace FajrSquad.Infrastructure.Data
             };
 
             context.Reminders.AddRange(reminders);
+        }
+
+        private static async Task SeedAdhkarAsync(FajrDbContext context)
+        {
+            if (await context.Adhkar.AnyAsync()) return;
+
+            var adhkar = new List<Adhkar>
+            {
+                // Morning Adhkar (Mattino)
+                new Adhkar
+                {
+                    Arabic = "بِسْمِ اللَّهِ الَّذِي لَا يَضُرُّ مَعَ اسْمِهِ شَيْءٌ فِي الْأَرْضِ وَلَا فِي السَّمَاءِ وَهُوَ السَّمِيعُ الْعَلِيمُ",
+                    Transliteration = "Bismillāhilladhī lā yaḍurru ma'a ismihi shay'un fil-arḍi wa lā fis-samā'i wa huwas-samī'ul-'alīm",
+                    Translation = "Nel nome di Allah, con il cui nome nulla può recare danno sulla terra né in cielo, ed Egli è l'Audiente, il Sapiente",
+                    Repetitions = 3,
+                    Source = "Abu Dawud 5088",
+                    Category = "morning",
+                    Priority = 1,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ وَالْحَمْدُ لِلَّهِ",
+                    Transliteration = "Aṣbaḥnā wa aṣbaḥal-mulku lillāhi wal-ḥamdu lillāh",
+                    Translation = "Entriamo nel mattino e il regno appartiene ad Allah, e la lode è per Allah",
+                    Repetitions = 1,
+                    Source = "Sahih Muslim 2723",
+                    Category = "morning",
+                    Priority = 1,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "اللَّهُمَّ إِنِّي أَصْبَحْتُ أُشْهِدُكَ وَأُشْهِدُ حَمَلَةَ عَرْشِكَ",
+                    Transliteration = "Allāhumma innī aṣbaḥtu ush-hiduka wa ush-hidu ḥamalata 'arshika",
+                    Translation = "O Allah, ti prendo come testimone al mattino, insieme ai portatori del Tuo Trono",
+                    Repetitions = 1,
+                    Source = "Abu Dawud 5069",
+                    Category = "morning",
+                    Priority = 1,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "اللَّهُمَّ بِكَ أَصْبَحْنَا وَبِكَ أَمْسَيْنَا",
+                    Transliteration = "Allāhumma bika aṣbaḥnā wa bika amsaynā",
+                    Translation = "O Allah, con Te entriamo nel mattino e con Te entriamo nella sera",
+                    Repetitions = 1,
+                    Source = "Abu Dawud 5071",
+                    Category = "morning",
+                    Priority = 2,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ",
+                    Transliteration = "Subḥānallāhi wa biḥamdih",
+                    Translation = "Gloria ad Allah e lode a Lui",
+                    Repetitions = 100,
+                    Source = "Sahih Muslim 2694",
+                    Category = "morning",
+                    Priority = 1,
+                    Language = "it"
+                },
+
+                // Evening Adhkar (Sera)
+                new Adhkar
+                {
+                    Arabic = "أَمْسَيْنَا وَأَمْسَى الْمُلْكُ لِلَّهِ وَالْحَمْدُ لِلَّهِ",
+                    Transliteration = "Amsaynā wa amsā al-mulku lillāhi wal-ḥamdu lillāh",
+                    Translation = "Entriamo nella sera e il regno appartiene ad Allah, e la lode è per Allah",
+                    Repetitions = 1,
+                    Source = "Sahih Muslim 2723",
+                    Category = "evening",
+                    Priority = 1,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "اللَّهُمَّ بِكَ أَمْسَيْنَا وَبِكَ أَصْبَحْنَا",
+                    Transliteration = "Allāhumma bika amsaynā wa bika aṣbaḥnā",
+                    Translation = "O Allah, con Te entriamo nella sera e con Te entriamo nel mattino",
+                    Repetitions = 1,
+                    Source = "Abu Dawud 5071",
+                    Category = "evening",
+                    Priority = 1,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "اللَّهُمَّ إِنِّي أَمْسَيْتُ أُشْهِدُكَ وَأُشْهِدُ حَمَلَةَ عَرْشِكَ",
+                    Transliteration = "Allāhumma innī amsaytu ush-hiduka wa ush-hidu ḥamalata 'arshika",
+                    Translation = "O Allah, ti prendo come testimone alla sera, insieme ai portatori del Tuo Trono",
+                    Repetitions = 1,
+                    Source = "Abu Dawud 5069",
+                    Category = "evening",
+                    Priority = 1,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ",
+                    Transliteration = "Subḥānallāhi wa biḥamdih",
+                    Translation = "Gloria ad Allah e lode a Lui",
+                    Repetitions = 100,
+                    Source = "Sahih Muslim 2694",
+                    Category = "evening",
+                    Priority = 1,
+                    Language = "it"
+                },
+
+                // Prayer Adhkar (Preghiera)
+                new Adhkar
+                {
+                    Arabic = "أَسْتَغْفِرُ اللَّهَ الْعَظِيمَ",
+                    Transliteration = "Astaghfirullāhal-'aẓīm",
+                    Translation = "Chiedo perdono ad Allah, il Magnifico",
+                    Repetitions = 3,
+                    Source = "Sahih Muslim 591",
+                    Category = "prayer",
+                    Priority = 1,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "سُبْحَانَ اللَّهِ وَالْحَمْدُ لِلَّهِ وَاللَّهُ أَكْبَرُ",
+                    Transliteration = "Subḥānallāhi wal-ḥamdu lillāhi wallāhu akbar",
+                    Translation = "Gloria ad Allah, lode ad Allah, Allah è il più Grande",
+                    Repetitions = 33,
+                    Source = "Sahih Muslim 596",
+                    Category = "prayer",
+                    Priority = 1,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "سُبْحَانَ اللَّهِ",
+                    Transliteration = "Subḥānallāh",
+                    Translation = "Gloria ad Allah",
+                    Repetitions = 33,
+                    Source = "Sahih Muslim 596",
+                    Category = "prayer",
+                    Priority = 1,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "الْحَمْدُ لِلَّهِ",
+                    Transliteration = "Al-ḥamdu lillāh",
+                    Translation = "Lode ad Allah",
+                    Repetitions = 33,
+                    Source = "Sahih Muslim 596",
+                    Category = "prayer",
+                    Priority = 1,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "اللَّهُ أَكْبَرُ",
+                    Transliteration = "Allāhu akbar",
+                    Translation = "Allah è il più Grande",
+                    Repetitions = 33,
+                    Source = "Sahih Muslim 596",
+                    Category = "prayer",
+                    Priority = 1,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "لَا إِلَهَ إِلَّا اللَّهُ وَحْدَهُ لَا شَرِيكَ لَهُ",
+                    Transliteration = "Lā ilāha illallāhu waḥdahu lā sharīka lah",
+                    Translation = "Non c'è divinità all'infuori di Allah, l'Unico, senza associati",
+                    Repetitions = 1,
+                    Source = "Sahih Muslim 597",
+                    Category = "prayer",
+                    Priority = 1,
+                    Language = "it"
+                },
+
+                // Sleep Adhkar (Sonno)
+                new Adhkar
+                {
+                    Arabic = "بِاسْمِكَ اللَّهُمَّ أَمُوتُ وَأَحْيَا",
+                    Transliteration = "Bismika Allāhumma amūtu wa aḥyā",
+                    Translation = "Nel Tuo nome, o Allah, muoio e vivo",
+                    Repetitions = 1,
+                    Source = "Sahih Bukhari 6312",
+                    Category = "sleep",
+                    Priority = 1,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "اللَّهُمَّ قِنِي عَذَابَكَ يَوْمَ تَبْعَثُ عِبَادَكَ",
+                    Transliteration = "Allāhumma qinī 'adhābaka yawma tab'athu 'ibādak",
+                    Translation = "O Allah, proteggimi dal Tuo castigo nel Giorno in cui risusciterai i Tuoi servi",
+                    Repetitions = 3,
+                    Source = "Abu Dawud 5045",
+                    Category = "sleep",
+                    Priority = 1,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "اللَّهُمَّ بِاسْمِكَ أَمُوتُ وَأَحْيَا",
+                    Transliteration = "Allāhumma bismika amūtu wa aḥyā",
+                    Translation = "O Allah, nel Tuo nome muoio e vivo",
+                    Repetitions = 1,
+                    Source = "Sahih Bukhari 6312",
+                    Category = "sleep",
+                    Priority = 1,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "بِاسْمِكَ رَبِّي وَضَعْتُ جَنْبِي",
+                    Transliteration = "Bismika rabbī waḍa'tu janbī",
+                    Translation = "Nel Tuo nome, o mio Signore, depongo il mio fianco",
+                    Repetitions = 1,
+                    Source = "Sahih Bukhari 6312",
+                    Category = "sleep",
+                    Priority = 2,
+                    Language = "it"
+                },
+                new Adhkar
+                {
+                    Arabic = "اللَّهُمَّ إِنَّكَ خَلَقْتَ نَفْسِي وَأَنْتَ تَوَفَّاهَا",
+                    Transliteration = "Allāhumma innaka khalaqta nafsī wa anta tawaffāhā",
+                    Translation = "O Allah, Tu hai creato la mia anima e Tu la farai morire",
+                    Repetitions = 1,
+                    Source = "Sahih Bukhari 6312",
+                    Category = "sleep",
+                    Priority = 2,
+                    Language = "it"
+                },
+
+                // Versione francese
+                new Adhkar
+                {
+                    Arabic = "بِسْمِ اللَّهِ الَّذِي لَا يَضُرُّ مَعَ اسْمِهِ شَيْءٌ فِي الْأَرْضِ وَلَا فِي السَّمَاءِ وَهُوَ السَّمِيعُ الْعَلِيمُ",
+                    Transliteration = "Bismillāhilladhī lā yaḍurru ma'a ismihi shay'un fil-arḍi wa lā fis-samā'i wa huwas-samī'ul-'alīm",
+                    Translation = "Au nom d'Allah, avec le nom duquel rien ne peut nuire sur terre ni dans le ciel, et Il est l'Audient, le Savant",
+                    Repetitions = 3,
+                    Source = "Abu Dawud 5088",
+                    Category = "morning",
+                    Priority = 1,
+                    Language = "fr"
+                },
+                new Adhkar
+                {
+                    Arabic = "أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ وَالْحَمْدُ لِلَّهِ",
+                    Transliteration = "Aṣbaḥnā wa aṣbaḥal-mulku lillāhi wal-ḥamdu lillāh",
+                    Translation = "Nous entrons dans le matin et le royaume appartient à Allah, et la louange est à Allah",
+                    Repetitions = 1,
+                    Source = "Sahih Muslim 2723",
+                    Category = "morning",
+                    Priority = 1,
+                    Language = "fr"
+                },
+                new Adhkar
+                {
+                    Arabic = "أَمْسَيْنَا وَأَمْسَى الْمُلْكُ لِلَّهِ وَالْحَمْدُ لِلَّهِ",
+                    Transliteration = "Amsaynā wa amsā al-mulku lillāhi wal-ḥamdu lillāh",
+                    Translation = "Nous entrons dans le soir et le royaume appartient à Allah, et la louange est à Allah",
+                    Repetitions = 1,
+                    Source = "Sahih Muslim 2723",
+                    Category = "evening",
+                    Priority = 1,
+                    Language = "fr"
+                },
+                new Adhkar
+                {
+                    Arabic = "سُبْحَانَ اللَّهِ وَالْحَمْدُ لِلَّهِ وَاللَّهُ أَكْبَرُ",
+                    Transliteration = "Subḥānallāhi wal-ḥamdu lillāhi wallāhu akbar",
+                    Translation = "Gloire à Allah, louange à Allah, Allah est le plus Grand",
+                    Repetitions = 33,
+                    Source = "Sahih Muslim 596",
+                    Category = "prayer",
+                    Priority = 1,
+                    Language = "fr"
+                },
+                new Adhkar
+                {
+                    Arabic = "بِاسْمِكَ اللَّهُمَّ أَمُوتُ وَأَحْيَا",
+                    Transliteration = "Bismika Allāhumma amūtu wa aḥyā",
+                    Translation = "En Ton nom, ô Allah, je meurs et je vis",
+                    Repetitions = 1,
+                    Source = "Sahih Bukhari 6312",
+                    Category = "sleep",
+                    Priority = 1,
+                    Language = "fr"
+                }
+            };
+
+            context.Adhkar.AddRange(adhkar);
         }
     }
 }
