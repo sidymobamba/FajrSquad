@@ -24,6 +24,16 @@ namespace FajrSquad.Core.Entities
         [Required, StringLength(56)]
         public string Country { get; set; } = "Italy";
 
+        // 👇 Location coordinates for accurate prayer times calculation
+        [Column(TypeName = "decimal(9,6)")]
+        public decimal? Latitude { get; set; }
+
+        [Column(TypeName = "decimal(9,6)")]
+        public decimal? Longitude { get; set; }
+
+        [StringLength(50)]
+        public string? TimeZone { get; set; } // e.g., "Europe/Rome", "Africa/Dakar"
+
         [StringLength(50)]
         public string Role { get; set; } = "User";
 

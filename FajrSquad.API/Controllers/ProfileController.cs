@@ -82,6 +82,7 @@ namespace FajrSquad.API.Controllers
                     Email = user.Email,
                     Phone = user.Phone,
                     City = user.City,
+                    Country = user.Country,
                     Role = user.Role,
                     Avatar = user.ProfilePicture
                 }
@@ -202,7 +203,9 @@ namespace FajrSquad.API.Controllers
         }
 
         [HttpPut("update")]
-        public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+        public async Task<IActionResult> UpdateProfile(
+            [FromBody] UpdateProfileRequest request,
+            [FromServices] JwtService jwt)
         {
             if (!TryGetUserId(out var userId))
                 return Unauthorized(ApiResponse<object>.ErrorResponse("Token non valido"));
@@ -210,19 +213,61 @@ namespace FajrSquad.API.Controllers
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null) return NotFound(ApiResponse<object>.ErrorResponse("Utente non trovato"));
 
+            // Aggiorna i dati utente
             if (!string.IsNullOrWhiteSpace(request.Name)) user.Name = request.Name;
             if (!string.IsNullOrWhiteSpace(request.Email)) user.Email = request.Email;
             if (!string.IsNullOrWhiteSpace(request.City)) user.City = request.City;
+            if (!string.IsNullOrWhiteSpace(request.Country)) user.Country = request.Country;
+            
+            // Aggiorna coordinate location se fornite
+            if (request.Latitude.HasValue) user.Latitude = request.Latitude.Value;
+            if (request.Longitude.HasValue) user.Longitude = request.Longitude.Value;
+            if (!string.IsNullOrWhiteSpace(request.TimeZone)) user.TimeZone = request.TimeZone;
 
             await _context.SaveChangesAsync();
 
+            // Log dettagliato per debug
+            _logger.LogInformation(
+                "Profile updated - UserId={UserId}, City={City}, Country={Country}, Lat={Lat}, Lng={Lng}, TZ={TZ}",
+                userId, user.City, user.Country, user.Latitude, user.Longitude, user.TimeZone);
+
+            // Rigenera i token con i dati aggiornati
+            var accessMinutes = GetAccessMinutesFromConfig();
+            var accessToken = jwt.GenerateAccessToken(user);
+            var accessExpUtc = DateTime.UtcNow.AddMinutes(accessMinutes);
+            
+            // Ottieni il refresh token corrente (non revocato) o creane uno nuovo
+            var currentRefresh = await _context.RefreshTokens
+                .FirstOrDefaultAsync(r => r.UserId == userId && r.Revoked == null && r.Expires > DateTime.UtcNow);
+            
+            RefreshToken refreshToken;
+            if (currentRefresh != null)
+            {
+                // Usa il refresh token esistente (non facciamo rotazione per semplicità)
+                refreshToken = currentRefresh;
+            }
+            else
+            {
+                // Crea un nuovo refresh token se non ce n'è uno valido
+                refreshToken = await CreateAndStoreRefreshAsync(user);
+            }
+
+            var authResponse = BuildAuthResponse(user, accessToken, accessExpUtc, refreshToken);
+
+            // Restituisci sia i dati del profilo che i nuovi token
             return Ok(ApiResponse<object>.SuccessResponse(new
             {
                 user.Id,
                 user.Name,
                 user.Email,
                 user.City,
-                user.ProfilePicture
+                user.Country,
+                user.Latitude,
+                user.Longitude,
+                user.TimeZone,
+                user.ProfilePicture,
+                // Includi i nuovi token nella risposta
+                tokens = authResponse
             }, "Profilo aggiornato con successo"));
         }
 

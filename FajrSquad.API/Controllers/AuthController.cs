@@ -194,28 +194,43 @@ namespace FajrSquad.API.Controllers
         public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest req, [FromServices] JwtService jwt)
         {
             if (string.IsNullOrWhiteSpace(req.RefreshToken))
-                return BadRequest("Refresh token mancante.");
+                return BadRequest(new { message = "Refresh token mancante." });
 
             var stored = await _db.RefreshTokens.FirstOrDefaultAsync(r => r.Token == req.RefreshToken);
-            if (stored == null) return Unauthorized("Refresh token non valido.");
-            if (stored.Revoked != null) return Unauthorized("Refresh token revocato.");
-            if (stored.Expires <= DateTime.UtcNow) return Unauthorized("Refresh token scaduto.");
+            if (stored == null) 
+                return Unauthorized(new { message = "Refresh token non valido." });
+            
+            if (stored.Revoked != null) 
+                return Unauthorized(new { message = "Refresh token revocato." });
+            
+            if (stored.Expires <= DateTime.UtcNow) 
+                return Unauthorized(new { message = "Refresh token scaduto." });
 
             var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == stored.UserId);
-            if (user == null) return Unauthorized("Utente non valido.");
+            if (user == null) 
+                return Unauthorized(new { message = "Utente non valido." });
 
-            // Rotazione: revoca il vecchio e crea il nuovo
-            stored.Revoked = DateTime.UtcNow;
-            var newRefresh = await CreateAndStoreRefreshAsync(user, replacedBy: null);
-            stored.ReplacedByToken = newRefresh.Token;
-            await _db.SaveChangesAsync();
+            try
+            {
+                // Rotazione: revoca il vecchio e crea il nuovo
+                stored.Revoked = DateTime.UtcNow;
+                var newRefresh = await CreateAndStoreRefreshAsync(user, replacedBy: null);
+                stored.ReplacedByToken = newRefresh.Token;
+                await _db.SaveChangesAsync();
 
-            var accessMinutes = GetAccessMinutesFromConfig();
-            var accessToken = jwt.GenerateAccessToken(user);
-            var accessExpUtc = DateTime.UtcNow.AddMinutes(accessMinutes);
+                var accessMinutes = GetAccessMinutesFromConfig();
+                var accessToken = jwt.GenerateAccessToken(user);
+                var accessExpUtc = DateTime.UtcNow.AddMinutes(accessMinutes);
 
-            var payload = BuildAuthResponse(user, accessToken, accessExpUtc, newRefresh);
-            return Ok(payload);
+                var payload = BuildAuthResponse(user, accessToken, accessExpUtc, newRefresh);
+                return Ok(payload);
+            }
+            catch (Exception ex)
+            {
+                // Log dell'errore per debugging
+                Console.WriteLine($"❌ [AuthController] Error during token refresh: {ex.Message}");
+                return StatusCode(500, new { message = "Errore durante il refresh del token." });
+            }
         }
 
         // 🚪 Logout: revoca 1 token (se passato) o tutti i refresh dell’utente corrente
@@ -306,7 +321,7 @@ namespace FajrSquad.API.Controllers
 
         [Authorize]
         [HttpPut("/api/user")]
-        public async Task<IActionResult> UpdateOwnProfile(UpdateUserRequest request)
+        public async Task<IActionResult> UpdateOwnProfile(UpdateUserRequest request, [FromServices] JwtService jwt)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
             if (userId == null) return Unauthorized();
@@ -322,7 +337,40 @@ namespace FajrSquad.API.Controllers
             _db.Users.Update(user);
             await _db.SaveChangesAsync();
 
-            return Ok(new { user.Id, user.Name, user.Email, user.City, user.Country });
+            // Rigenera i token con i dati aggiornati
+            var accessMinutes = GetAccessMinutesFromConfig();
+            var accessToken = jwt.GenerateAccessToken(user);
+            var accessExpUtc = DateTime.UtcNow.AddMinutes(accessMinutes);
+            
+            // Ottieni il refresh token corrente (non revocato) o creane uno nuovo
+            var currentRefresh = await _db.RefreshTokens
+                .FirstOrDefaultAsync(r => r.UserId == user.Id && r.Revoked == null && r.Expires > DateTime.UtcNow);
+            
+            RefreshToken refreshToken;
+            if (currentRefresh != null)
+            {
+                // Usa il refresh token esistente (non facciamo rotazione per semplicità)
+                refreshToken = currentRefresh;
+            }
+            else
+            {
+                // Crea un nuovo refresh token se non ce n'è uno valido
+                refreshToken = await CreateAndStoreRefreshAsync(user, replacedBy: null);
+            }
+
+            var authResponse = BuildAuthResponse(user, accessToken, accessExpUtc, refreshToken);
+
+            // Restituisci sia i dati del profilo che i nuovi token
+            return Ok(new 
+            { 
+                user.Id, 
+                user.Name, 
+                user.Email, 
+                user.City, 
+                user.Country,
+                // Includi i nuovi token nella risposta
+                tokens = authResponse
+            });
         }
 
 

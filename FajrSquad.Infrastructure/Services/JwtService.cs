@@ -24,8 +24,18 @@ namespace FajrSquad.Infrastructure.Services
                 new Claim("phone", user.Phone),
                 new Claim(ClaimTypes.Role, user.Role ?? "User"),
                 new Claim("city", user.City ?? "Roma"),
-                new("country", user.Country)
+                new Claim("country", user.Country ?? "Italy")
             };
+
+            // Aggiungi coordinate location se disponibili
+            if (user.Latitude.HasValue)
+                claims.Add(new Claim("lat", user.Latitude.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            
+            if (user.Longitude.HasValue)
+                claims.Add(new Claim("lng", user.Longitude.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            
+            if (!string.IsNullOrWhiteSpace(user.TimeZone))
+                claims.Add(new Claim("tz", user.TimeZone));
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

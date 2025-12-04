@@ -14,6 +14,17 @@ namespace FajrSquad.Core.DTOs
         public string? City { get; set; }
 
         [StringLength(100)]
+        public string? Country { get; set; }
+
+        // Location coordinates for accurate prayer times calculation
+        public decimal? Latitude { get; set; }
+
+        public decimal? Longitude { get; set; }
+
+        [StringLength(50)]
+        public string? TimeZone { get; set; } // e.g., "Europe/Rome", "Africa/Dakar"
+
+        [StringLength(100)]
         public string? MotivatingBrother { get; set; }
     }
 
