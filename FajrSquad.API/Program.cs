@@ -287,7 +287,12 @@ app.Use(async (context, next) =>
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"❌ Unhandled exception: {ex}");
+        Console.WriteLine($"❌ Unhandled exception: {ex.GetType().Name}: {ex.Message}");
+        Console.WriteLine($"Stack trace: {ex.StackTrace}");
+        if (ex.InnerException != null)
+        {
+            Console.WriteLine($"Inner exception: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
+        }
         var origin = context.Request.Headers["Origin"].ToString();
         if (!string.IsNullOrEmpty(origin))
         {
@@ -295,7 +300,15 @@ app.Use(async (context, next) =>
             context.Response.Headers["Vary"] = "Origin";
         }
         context.Response.StatusCode = 500;
-        await context.Response.WriteAsJsonAsync(new { error = "Internal Server Error" });
+        // In Development, mostra più dettagli
+        if (app.Environment.IsDevelopment())
+        {
+            await context.Response.WriteAsJsonAsync(new { error = "Internal Server Error", message = ex.Message, type = ex.GetType().Name });
+        }
+        else
+        {
+            await context.Response.WriteAsJsonAsync(new { error = "Internal Server Error" });
+        }
     }
 });
 

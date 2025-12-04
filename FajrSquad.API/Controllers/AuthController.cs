@@ -158,16 +158,72 @@ namespace FajrSquad.API.Controllers
         }
 
         [HttpPost("login")]
-        public async Task<IActionResult> Login(LoginRequest request, [FromServices] JwtService jwt)
+        public async Task<IActionResult> Login([FromBody] LoginRequest request, [FromServices] JwtService jwt)
         {
-            var user = await _db.Users.FirstOrDefaultAsync(u => u.Phone == request.Phone);
-            if (user == null) return Unauthorized("Utente non trovato.");
+            try
+            {
+                Console.WriteLine($"🔍 [AuthController] Tentativo login - Request ricevuto: {request != null}");
+                
+                if (request == null)
+                {
+                    Console.WriteLine("❌ [AuthController] Request è null");
+                    return BadRequest(new { error = "Request non valido. Verifica il formato JSON." });
+                }
 
-            if (!BCrypt.Net.BCrypt.Verify(request.Pin, user.PasswordHash))
-                return Unauthorized("PIN errato.");
+                // Validazione modello
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                    Console.WriteLine($"❌ [AuthController] Validazione modello fallita: {string.Join(", ", errors)}");
+                    return BadRequest(new { error = "Dati non validi", details = errors });
+                }
 
-            var payload = await IssueTokensAsync(user, jwt);
-            return Ok(payload);
+                Console.WriteLine($"🔍 [AuthController] Tentativo login per telefono: {request.Phone}");
+                
+                if (string.IsNullOrWhiteSpace(request.Phone))
+                {
+                    Console.WriteLine("❌ [AuthController] Phone è null o vuoto");
+                    return BadRequest(new { error = "Telefono richiesto." });
+                }
+
+                if (string.IsNullOrWhiteSpace(request.Pin))
+                {
+                    Console.WriteLine("❌ [AuthController] PIN è null o vuoto");
+                    return BadRequest(new { error = "PIN richiesto." });
+                }
+
+                if (jwt == null)
+                {
+                    Console.WriteLine("❌ [AuthController] JwtService è null - problema di dependency injection");
+                    return StatusCode(500, new { error = "Errore di configurazione del servizio." });
+                }
+
+                var user = await _db.Users.FirstOrDefaultAsync(u => u.Phone == request.Phone);
+                if (user == null) return Unauthorized("Utente non trovato.");
+
+                // Controlla se l'utente ha un PasswordHash valido
+                if (string.IsNullOrWhiteSpace(user.PasswordHash))
+                {
+                    Console.WriteLine($"❌ [AuthController] Login fallito: utente {request.Phone} non ha un PIN impostato (registrato con OTP?)");
+                    return BadRequest("Questo account è stato registrato con OTP. Usa il login con OTP invece del PIN.");
+                }
+
+                if (!BCrypt.Net.BCrypt.Verify(request.Pin, user.PasswordHash))
+                {
+                    Console.WriteLine($"❌ [AuthController] Login fallito: PIN errato per utente {request.Phone}");
+                    return Unauthorized("PIN errato.");
+                }
+
+                var payload = await IssueTokensAsync(user, jwt);
+                Console.WriteLine($"✅ [AuthController] Login riuscito per utente {request.Phone}");
+                return Ok(payload);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ [AuthController] Errore durante il login: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                return StatusCode(500, new { error = "Errore interno durante il login.", message = ex.Message });
+            }
         }
 
         [HttpPost("login-with-otp")]

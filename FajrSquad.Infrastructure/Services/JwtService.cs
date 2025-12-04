@@ -17,6 +17,17 @@ namespace FajrSquad.Infrastructure.Services
 
         public string GenerateAccessToken(User user)
         {
+            // Validazione configurazione
+            if (string.IsNullOrWhiteSpace(_settings.Secret))
+            {
+                throw new InvalidOperationException("JWT Secret non configurato. Verifica la configurazione in appsettings.json.");
+            }
+
+            if (string.IsNullOrWhiteSpace(_settings.Issuer))
+            {
+                throw new InvalidOperationException("JWT Issuer non configurato. Verifica la configurazione in appsettings.json.");
+            }
+
             var claims = new List<Claim>
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
@@ -26,16 +37,6 @@ namespace FajrSquad.Infrastructure.Services
                 new Claim("city", user.City ?? "Roma"),
                 new Claim("country", user.Country ?? "Italy")
             };
-
-            // Aggiungi coordinate location se disponibili
-            if (user.Latitude.HasValue)
-                claims.Add(new Claim("lat", user.Latitude.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)));
-            
-            if (user.Longitude.HasValue)
-                claims.Add(new Claim("lng", user.Longitude.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)));
-            
-            if (!string.IsNullOrWhiteSpace(user.TimeZone))
-                claims.Add(new Claim("tz", user.TimeZone));
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

@@ -218,18 +218,13 @@ namespace FajrSquad.API.Controllers
             if (!string.IsNullOrWhiteSpace(request.Email)) user.Email = request.Email;
             if (!string.IsNullOrWhiteSpace(request.City)) user.City = request.City;
             if (!string.IsNullOrWhiteSpace(request.Country)) user.Country = request.Country;
-            
-            // Aggiorna coordinate location se fornite
-            if (request.Latitude.HasValue) user.Latitude = request.Latitude.Value;
-            if (request.Longitude.HasValue) user.Longitude = request.Longitude.Value;
-            if (!string.IsNullOrWhiteSpace(request.TimeZone)) user.TimeZone = request.TimeZone;
 
             await _context.SaveChangesAsync();
 
             // Log dettagliato per debug
             _logger.LogInformation(
-                "Profile updated - UserId={UserId}, City={City}, Country={Country}, Lat={Lat}, Lng={Lng}, TZ={TZ}",
-                userId, user.City, user.Country, user.Latitude, user.Longitude, user.TimeZone);
+                "Profile updated - UserId={UserId}, City={City}, Country={Country}",
+                userId, user.City, user.Country);
 
             // Rigenera i token con i dati aggiornati
             var accessMinutes = GetAccessMinutesFromConfig();
@@ -262,9 +257,6 @@ namespace FajrSquad.API.Controllers
                 user.Email,
                 user.City,
                 user.Country,
-                user.Latitude,
-                user.Longitude,
-                user.TimeZone,
                 user.ProfilePicture,
                 // Includi i nuovi token nella risposta
                 tokens = authResponse
