@@ -156,8 +156,11 @@ namespace FajrSquad.Infrastructure.Services.PrayerTimes
                 {
                     result.City = resolvedCity ?? result.City;
                     result.Country = resolvedCountry ?? result.Country;
+                    // Normalize timezone to IANA before caching
                     if (!string.IsNullOrWhiteSpace(resolvedTimeZone))
-                        result.Timezone = resolvedTimeZone;
+                        result.Timezone = TzHelper.NormalizeTimezoneByCountry(resolvedTimeZone, resolvedCountry);
+                    else if (!string.IsNullOrWhiteSpace(result.Timezone))
+                        result.Timezone = TzHelper.NormalizeTimezoneByCountry(result.Timezone, result.Country);
                     
                     await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(CacheMinutes));
                     return result;
@@ -262,6 +265,19 @@ namespace FajrSquad.Infrastructure.Services.PrayerTimes
                 {
                     result.City = resolvedCity ?? result.City;
                     result.Country = resolvedCountry ?? result.Country;
+                    
+                    // Normalize timezone to IANA before caching (for all days)
+                    if (result.Days != null && result.Days.Count > 0)
+                    {
+                        var normalizedTz = TzHelper.NormalizeTimezoneByCountry(resolvedTimeZone, resolvedCountry ?? result.Country);
+                        foreach (var day in result.Days)
+                        {
+                            if (!string.IsNullOrWhiteSpace(day.Timezone))
+                                day.Timezone = TzHelper.NormalizeTimezoneByCountry(day.Timezone, resolvedCountry ?? result.Country);
+                            else
+                                day.Timezone = normalizedTz;
+                        }
+                    }
                     
                     await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(CacheMinutes));
                     return result;

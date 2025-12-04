@@ -248,12 +248,39 @@ builder.Services.Configure<FormOptions>(options =>
 
 // 🔹 Extra
 builder.Services.AddHttpClient();
-// Configure named HttpClient for PrayerTimes service
+// Configure named HttpClient for PrayerTimes service with Polly retry & circuit breaker
 builder.Services.AddHttpClient("PrayerTimes", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(15);
     client.DefaultRequestHeaders.Add("User-Agent", "FajrSquad/1.0");
-});
+})
+.AddPolicyHandler(Polly.Policy
+    .HandleResult<HttpResponseMessage>(r => (int)r.StatusCode >= 500 || r.StatusCode == System.Net.HttpStatusCode.RequestTimeout)
+    .Or<TaskCanceledException>()
+    .Or<HttpRequestException>()
+    .WaitAndRetryAsync(
+        retryCount: 2,
+        sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)), // Exponential backoff: 2s, 4s
+        onRetry: (outcome, timespan, retryCount, context) =>
+        {
+            var logger = context.GetLogger();
+            logger?.LogWarning("AlAdhan retry {RetryCount}/2 after {Seconds}s", retryCount, timespan.TotalSeconds);
+        }))
+.AddPolicyHandler(Polly.Policy
+    .HandleResult<HttpResponseMessage>(r => (int)r.StatusCode >= 500)
+    .CircuitBreakerAsync(
+        handledEventsAllowedBeforeBreaking: 3,
+        durationOfBreak: TimeSpan.FromSeconds(30),
+        onBreak: (result, duration, context) =>
+        {
+            var logger = context.GetLogger();
+            logger?.LogError("AlAdhan circuit breaker OPEN for {Seconds}s", duration.TotalSeconds);
+        },
+        onReset: (context) =>
+        {
+            var logger = context.GetLogger();
+            logger?.LogInformation("AlAdhan circuit breaker CLOSED");
+        }));
 // Configure named HttpClient for Geolocation service
 builder.Services.AddHttpClient("Geolocation", client =>
 {

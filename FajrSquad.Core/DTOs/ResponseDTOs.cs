@@ -116,10 +116,11 @@ namespace FajrSquad.Core.DTOs
         int Method,
         int School,
         string Date,
-        PrayersDto Prayers,
+        PrayersDto? Prayers, // null if upstream unavailable
         string? NextPrayerName,
         string? NextPrayerTime,
-        string? NextFajrTime);
+        string? NextFajrTime,
+        string? Error = null); // "UPSTREAM_UNAVAILABLE" if AlAdhan is down
 
     public record PrayerWeekResponseV2(
         string Source, // "coords" | "fallback_city_country" | "fallback_profile"
@@ -129,5 +130,6 @@ namespace FajrSquad.Core.DTOs
         int School,
         string RangeStart, // yyyy-MM-dd
         string RangeEnd,   // yyyy-MM-dd
-        List<PrayerDayDto> Days);
+        List<PrayerDayDto> Days,
+        string? Error = null); // "UPSTREAM_UNAVAILABLE" if AlAdhan is down
 }

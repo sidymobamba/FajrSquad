@@ -125,12 +125,29 @@ namespace FajrSquad.API.Controllers
                 var raw = await _prayerTimesService.GetTodayByCoordsAsync(
                     latitude.Value, longitude.Value, method, school, tz, ct);
 
+                // Guard-rail: Se AlAdhan down, ritorna 200 con location pieno e prayers:null
                 if (raw == null)
                 {
-                    return Problem(
-                        statusCode: 502,
-                        title: "Service unavailable",
-                        detail: "AlAdhan API is temporarily unavailable.");
+                    _logger.LogWarning("AlAdhan unavailable for lat={Lat}, lng={Lng}. Returning graceful response with location only.", latitude, longitude);
+                    var gracefulResp = new PrayerTimesResponse(
+                        Source: "coords",
+                        Location: new LocationDto(
+                            resolvedCity ?? string.Empty,
+                            resolvedCountry ?? string.Empty,
+                            tz), // Already normalized by country
+                        Coords: new CoordsDto(
+                            Math.Round(latitude.Value, 4),
+                            Math.Round(longitude.Value, 4),
+                            "p4"),
+                        Method: method,
+                        School: school,
+                        Date: DateTime.UtcNow.ToString("yyyy-MM-dd"),
+                        Prayers: null, // Upstream unavailable
+                        NextPrayerName: null,
+                        NextPrayerTime: null,
+                        NextFajrTime: null,
+                        Error: "UPSTREAM_UNAVAILABLE");
+                    return Ok(gracefulResp);
                 }
 
                 var resp = new PrayerTimesResponse(
@@ -358,12 +375,27 @@ namespace FajrSquad.API.Controllers
                 var raw = await _prayerTimesService.GetWeekByCoordsAsync(
                     latitude.Value, longitude.Value, method, school, startDate, days, tz, ct);
 
+                // Guard-rail: Se AlAdhan down, ritorna 200 con location pieno e days:[] + error
                 if (raw == null)
                 {
-                    return Problem(
-                        statusCode: 502,
-                        title: "Service unavailable",
-                        detail: "AlAdhan API is temporarily unavailable.");
+                    _logger.LogWarning("AlAdhan unavailable for lat={Lat}, lng={Lng}. Returning graceful response with location only.", latitude, longitude);
+                    var gracefulResp = new PrayerWeekResponseV2(
+                        Source: "coords",
+                        Location: new LocationDto(
+                            resolvedCity ?? string.Empty,
+                            resolvedCountry ?? string.Empty,
+                            tz), // Already normalized by country
+                        Coords: new CoordsDto(
+                            Math.Round(latitude.Value, 4),
+                            Math.Round(longitude.Value, 4),
+                            "p4"),
+                        Method: method,
+                        School: school,
+                        RangeStart: startDate?.ToString("yyyy-MM-dd") ?? DateTime.UtcNow.ToString("yyyy-MM-dd"),
+                        RangeEnd: (startDate?.AddDays(days - 1) ?? DateTime.UtcNow.AddDays(days - 1)).ToString("yyyy-MM-dd"),
+                        Days: new List<PrayerDayDto>(), // Empty when upstream unavailable
+                        Error: "UPSTREAM_UNAVAILABLE");
+                    return Ok(gracefulResp);
                 }
 
                 var resp = new PrayerWeekResponseV2(
