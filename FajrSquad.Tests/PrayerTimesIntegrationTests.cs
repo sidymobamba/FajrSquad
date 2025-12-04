@@ -44,8 +44,8 @@ namespace FajrSquad.Tests
             Assert.False(string.IsNullOrWhiteSpace(result.Location.Timezone), "Timezone should not be empty");
             Assert.Equal("Europe/Rome", result.Location.Timezone); // Italy should normalize to Europe/Rome
             Assert.NotNull(result.Coords);
-            Assert.Equal(lat, result.Coords.Lat, 4);
-            Assert.Equal(lng, result.Coords.Lng, 4);
+            Assert.True(Math.Abs(lat - result.Coords.Lat.Value) < 0.0001, $"Latitude should be approximately {lat}");
+            Assert.True(Math.Abs(lng - result.Coords.Lng.Value) < 0.0001, $"Longitude should be approximately {lng}");
         }
 
         [Fact]

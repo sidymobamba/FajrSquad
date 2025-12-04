@@ -16,6 +16,8 @@ using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Server.IIS;
+using Polly;
+using Polly.Extensions.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
@@ -254,33 +256,17 @@ builder.Services.AddHttpClient("PrayerTimes", client =>
     client.Timeout = TimeSpan.FromSeconds(15);
     client.DefaultRequestHeaders.Add("User-Agent", "FajrSquad/1.0");
 })
-.AddPolicyHandler(Polly.Policy
-    .HandleResult<HttpResponseMessage>(r => (int)r.StatusCode >= 500 || r.StatusCode == System.Net.HttpStatusCode.RequestTimeout)
-    .Or<TaskCanceledException>()
-    .Or<HttpRequestException>()
+.AddPolicyHandler(HttpPolicyExtensions
+    .HandleTransientHttpError()
+    .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.RequestTimeout)
     .WaitAndRetryAsync(
         retryCount: 2,
-        sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)), // Exponential backoff: 2s, 4s
-        onRetry: (outcome, timespan, retryCount, context) =>
-        {
-            var logger = context.GetLogger();
-            logger?.LogWarning("AlAdhan retry {RetryCount}/2 after {Seconds}s", retryCount, timespan.TotalSeconds);
-        }))
-.AddPolicyHandler(Polly.Policy
-    .HandleResult<HttpResponseMessage>(r => (int)r.StatusCode >= 500)
+        sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt))))
+.AddPolicyHandler(HttpPolicyExtensions
+    .HandleTransientHttpError()
     .CircuitBreakerAsync(
         handledEventsAllowedBeforeBreaking: 3,
-        durationOfBreak: TimeSpan.FromSeconds(30),
-        onBreak: (result, duration, context) =>
-        {
-            var logger = context.GetLogger();
-            logger?.LogError("AlAdhan circuit breaker OPEN for {Seconds}s", duration.TotalSeconds);
-        },
-        onReset: (context) =>
-        {
-            var logger = context.GetLogger();
-            logger?.LogInformation("AlAdhan circuit breaker CLOSED");
-        }));
+        durationOfBreak: TimeSpan.FromSeconds(30)));
 // Configure named HttpClient for Geolocation service
 builder.Services.AddHttpClient("Geolocation", client =>
 {
