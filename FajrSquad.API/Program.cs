@@ -6,6 +6,7 @@ using FajrSquad.Infrastructure.Services;
 using FajrSquad.API.Jobs;
 using FajrSquad.Core.Profiles;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -80,6 +81,10 @@ builder.Services.AddScoped<IMessageBuilder, MessageBuilder>();
 builder.Services.AddScoped<INotificationScheduler, NotificationScheduler>();
 builder.Services.AddScoped<INotificationPrivacyService, NotificationPrivacyService>();
 builder.Services.AddScoped<INotificationMetricsService, NotificationMetricsService>();
+
+// 🔹 Prayer Times & Geolocation services (isolated feature - no impact on auth)
+builder.Services.AddScoped<FajrSquad.Infrastructure.Services.PrayerTimes.IGeolocationService, FajrSquad.Infrastructure.Services.PrayerTimes.GeolocationService>();
+builder.Services.AddScoped<FajrSquad.Infrastructure.Services.PrayerTimes.IPrayerTimesService, FajrSquad.Infrastructure.Services.PrayerTimes.PrayerTimesService>();
 
 // 🔹 Quartz
 builder.Services.AddQuartz(q =>
@@ -210,7 +215,22 @@ builder.Services.AddControllers()
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     })
-    .AddNewtonsoftJson();
+    .AddNewtonsoftJson()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        // Enable ProblemDetails for validation errors
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var problemDetails = new Microsoft.AspNetCore.Mvc.ProblemDetails
+            {
+                Title = "Validation error",
+                Detail = "One or more validation errors occurred.",
+                Status = 400,
+                Type = "https://tools.ietf.org/html/rfc7231#section-6.5.1"
+            };
+            return new BadRequestObjectResult(problemDetails);
+        };
+    });
 
 // 🔹 Configurazione per file upload
 builder.Services.Configure<IISServerOptions>(options =>
@@ -228,6 +248,18 @@ builder.Services.Configure<FormOptions>(options =>
 
 // 🔹 Extra
 builder.Services.AddHttpClient();
+// Configure named HttpClient for PrayerTimes service
+builder.Services.AddHttpClient("PrayerTimes", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.Add("User-Agent", "FajrSquad/1.0");
+});
+// Configure named HttpClient for Geolocation service
+builder.Services.AddHttpClient("Geolocation", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(5);
+    // User-Agent will be set per-request in GeolocationService
+});
 builder.Services.AddMemoryCache();
 builder.Services.AddHealthChecks();
 builder.Services.AddAutoMapper(typeof(FajrProfile));

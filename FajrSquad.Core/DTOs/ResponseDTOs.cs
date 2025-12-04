@@ -93,4 +93,41 @@ namespace FajrSquad.Core.DTOs
         public string? NextPrayerTime { get; set; } // HH:mm locale
         public string? NextFajrTime { get; set; }   // HH:mm locale (domani)
     }
+
+    // ===== New GPS-first Prayer Times DTOs =====
+    public record LocationDto(string? City, string? Country, string? Timezone);
+
+    public record CoordsDto(double? Lat, double? Lng, string? Precision);
+
+    public record PrayersDto(
+        string Fajr,
+        string Sunrise,
+        string Dhuhr,
+        string Asr,
+        string Maghrib,
+        string Isha,
+        string? Imsak,
+        string? Midnight);
+
+    public record PrayerTimesResponse(
+        string Source, // "coords" | "fallback_city_country" | "fallback_profile"
+        LocationDto Location,
+        CoordsDto Coords,
+        int Method,
+        int School,
+        string Date,
+        PrayersDto Prayers,
+        string? NextPrayerName,
+        string? NextPrayerTime,
+        string? NextFajrTime);
+
+    public record PrayerWeekResponseV2(
+        string Source, // "coords" | "fallback_city_country" | "fallback_profile"
+        LocationDto Location,
+        CoordsDto Coords,
+        int Method,
+        int School,
+        string RangeStart, // yyyy-MM-dd
+        string RangeEnd,   // yyyy-MM-dd
+        List<PrayerDayDto> Days);
 }

@@ -1,246 +1,460 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json.Linq;
+using Microsoft.Extensions.Logging;
 using FajrSquad.Core.DTOs;
+using FajrSquad.Infrastructure.Services.PrayerTimes;
 
 namespace FajrSquad.API.Controllers
 {
+    /// <summary>
+    /// Controller for prayer times with GPS-first location support
+    /// Priority: GPS coordinates → city/country query → profile claims
+    /// Isolated feature - no impact on login/register/auth endpoints
+    /// </summary>
     [ApiController]
     [Route("api/[controller]")]
     public class PrayerTimesController : ControllerBase
     {
-        private readonly HttpClient _http;
+        private readonly IPrayerTimesService _prayerTimesService;
+        private readonly IGeolocationService _geolocationService;
+        private readonly ILogger<PrayerTimesController> _logger;
 
-        public PrayerTimesController(IHttpClientFactory httpClientFactory)
+        public PrayerTimesController(
+            IPrayerTimesService prayerTimesService,
+            IGeolocationService geolocationService,
+            ILogger<PrayerTimesController> logger)
         {
-            _http = httpClientFactory.CreateClient();
-        }
-
-        // ---------- Helpers ----------
-        private static string? Claim(ClaimsPrincipal u, string type) => u.FindFirstValue(type);
-
-        private static (string city, string country) ResolvePlace(ClaimsPrincipal user, string? cityOverride, string? countryOverride)
-        {
-            var city = !string.IsNullOrWhiteSpace(cityOverride) ? cityOverride : Claim(user, "city");
-            var country = !string.IsNullOrWhiteSpace(countryOverride) ? countryOverride : (Claim(user, "country") ?? "Italy");
-
-            if (string.IsNullOrWhiteSpace(city))
-                throw new ArgumentException("City non disponibile (né nel token né in query).");
-
-            return (city!, country!);
-        }
-
-        private static PrayerTimesDto MapTimings(JToken timings)
-        {
-            string Get(string key) => timings[key]?.ToString() ?? "";
-
-            return new PrayerTimesDto
-            {
-                Fajr = Get("Fajr"),
-                Sunrise = Get("Sunrise"),
-                Dhuhr = Get("Dhuhr"),
-                Asr = Get("Asr"),
-                Maghrib = Get("Maghrib"),
-                Isha = Get("Isha"),
-                Imsak = timings["Imsak"]?.ToString(),
-                Midnight = timings["Midnight"]?.ToString()
-            };
+            _prayerTimesService = prayerTimesService;
+            _geolocationService = geolocationService;
+            _logger = logger;
         }
 
         // ---------- TODAY ----------
+        /// <summary>
+        /// Gets today's prayer times (GPS first)
+        /// Priority: GPS coordinates → city/country query → profile claims
+        /// </summary>
+        /// <remarks>
+        /// **Priority order:**
+        /// 1. GPS coordinates from query (highest priority) - reverse geocoding is performed automatically
+        /// 2. City/Country from query parameters (fallback)
+        /// 3. City/Country from user JWT claims (last resort)
+        /// 
+        /// **Examples:**
+        /// - By GPS: `/api/PrayerTimes/today?latitude=45.5416&longitude=10.2118` (Brescia)
+        /// - By city: `/api/PrayerTimes/today?city=Brescia&country=Italy`
+        /// - Using profile: `/api/PrayerTimes/today` (uses city/country from token)
+        /// 
+        /// **Calculation Methods:** See GetToday endpoint documentation for full list (default: 3 = MWL)
+        /// 
+        /// **School:** 0 = Standard (default), 1 = Hanafi
+        /// </remarks>
+        /// <param name="latitude">Latitude (-90 to 90). Takes highest priority. Example: 45.5416</param>
+        /// <param name="longitude">Longitude (-180 to 180). Takes highest priority. Example: 10.2118</param>
+        /// <param name="city">City name (fallback if coordinates not provided). Example: Brescia</param>
+        /// <param name="country">Country name (fallback if coordinates not provided). Example: Italy</param>
+        /// <param name="method">Calculation method (default: 3 = MWL)</param>
+        /// <param name="school">School of thought (default: 0 = Standard)</param>
+        /// <returns>Today's prayer times with source information</returns>
+        /// <response code="200">Returns prayer times successfully</response>
+        /// <response code="400">Invalid parameters (coordinates out of range, missing location)</response>
+        /// <response code="502">AlAdhan API unavailable</response>
         [Authorize]
         [HttpGet("today")]
-        public async Task<IActionResult> GetToday(
-            [FromQuery] int method = 3,    // 3 = MWL (default)
-            [FromQuery] int school = 0,    // 0 = Standard
-            [FromQuery] string? cityOverride = null,
-            [FromQuery] string? country = null)
+        [ProducesResponseType(typeof(PrayerTimesResponse), 200)]
+        [ProducesResponseType(typeof(ProblemDetails), 400)]
+        [ProducesResponseType(typeof(ProblemDetails), 502)]
+        public async Task<IActionResult> Today(
+            [FromQuery] double? latitude,
+            [FromQuery] double? longitude,
+            [FromQuery] string? city,
+            [FromQuery] string? country,
+            [FromQuery] int method = 3,
+            [FromQuery] int school = 0,
+            CancellationToken ct = default)
         {
-            try
+            // 1) GPS first - sempre calcolo da coords + reverse geocoding server-side
+            if (latitude is >= -90 and <= 90 && longitude is >= -180 and <= 180)
             {
-                var (city, countryFinal) = ResolvePlace(User, cityOverride, country);
+                _logger.LogInformation("Using GPS coordinates: lat={Latitude}, lng={Longitude}", latitude, longitude);
 
-                var url =
-                    $"https://api.aladhan.com/v1/timingsByCity" +
-                    $"?city={Uri.EscapeDataString(city)}" +
-                    $"&country={Uri.EscapeDataString(countryFinal)}" +
-                    $"&method={method}&school={school}";
-
-                var res = await _http.GetAsync(url);
-                if (!res.IsSuccessStatusCode)
-                    return StatusCode(502, new { error = "Errore chiamando Aladhan (today)." });
-
-                var json = JObject.Parse(await res.Content.ReadAsStringAsync());
-                var data = json["data"]!;
-                var tz = data["meta"]?["timezone"]?.ToString() ?? "UTC";
-                var timings = MapTimings(data["timings"]!);
-
-                // prossimo salah (best-effort su orari HH:mm)
-                var names = new[] { "Fajr", "Dhuhr", "Asr", "Maghrib", "Isha" };
-                string? nextName = null, nextTime = null;
+                // Reverse geocoding obbligatorio server-side per city/country/timezone
+                GeocodingResult? place = null;
                 try
                 {
-                    var now = TimeZoneInfo.ConvertTime(DateTime.UtcNow,
-                        TimeZoneInfo.FindSystemTimeZoneById(tz));
-
-                    foreach (var n in names)
+                    place = await _geolocationService.ReverseGeocodeAsync(
+                        (decimal)latitude.Value, (decimal)longitude.Value, ct);
+                    
+                    if (place != null)
                     {
-                        var t = data["timings"]?[n]?.ToString();
-                        if (string.IsNullOrWhiteSpace(t)) continue;
-
-                        var parts = t.Split(':');
-                        if (parts.Length < 2) continue;
-
-                        var local = new DateTime(now.Year, now.Month, now.Day,
-                            int.Parse(parts[0]), int.Parse(parts[1]), 0, DateTimeKind.Unspecified);
-
-                        if (local > now)
-                        {
-                            nextName = n;
-                            nextTime = local.ToString("HH:mm");
-                            break;
-                        }
+                        _logger.LogInformation("Reverse geocoding successful: lat={Lat}, lng={Lng} → city={City}, country={Country}",
+                            latitude, longitude, place.City, place.Country);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Reverse geocoding returned null for lat={Lat}, lng={Lng}", latitude, longitude);
                     }
                 }
-                catch { /* safe fallback */ }
-
-                // Fajr domani
-                string? nextFajr = null;
-                try
+                catch (Exception ex)
                 {
-                    var tomorrow = DateTime.UtcNow.Date.AddDays(1).ToString("dd-MM-yyyy");
-                    var tUrl =
-                        $"https://api.aladhan.com/v1/timingsByCity?date={tomorrow}" +
-                        $"&city={Uri.EscapeDataString(city)}&country={Uri.EscapeDataString(countryFinal)}" +
-                        $"&method={method}&school={school}";
-                    var tRes = await _http.GetAsync(tUrl);
-                    if (tRes.IsSuccessStatusCode)
+                    _logger.LogWarning(ex, "Reverse geocoding exception for {Lat},{Lng}", latitude, longitude);
+                }
+
+                // Se reverse fallisce o restituisce dati incompleti, prova city/country dai query params (se presenti)
+                string? resolvedCity = place?.City;
+                string? resolvedCountry = place?.Country;
+                
+                if (string.IsNullOrWhiteSpace(resolvedCity) || string.IsNullOrWhiteSpace(resolvedCountry))
+                {
+                    if (!string.IsNullOrWhiteSpace(city) && !string.IsNullOrWhiteSpace(country))
                     {
-                        var tJson = JObject.Parse(await tRes.Content.ReadAsStringAsync());
-                        nextFajr = tJson["data"]?["timings"]?["Fajr"]?.ToString();
+                        _logger.LogInformation("Using city/country from query params as fallback after reverse geocoding failure/incomplete data");
+                        resolvedCity = city;
+                        resolvedCountry = country;
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Reverse geocoding failed/incomplete and no city/country in query params. Location fields will be empty, but prayer times are correct (calculated from coords).");
                     }
                 }
-                catch { }
 
-                var payload = new PrayerTodayResponse
+                // Normalize timezone based on country (Italy → Europe/Rome, not Europe/Berlin)
+                var tz = TzHelper.NormalizeTimezoneByCountry(place?.TimeZoneId, resolvedCountry ?? place?.Country);
+                
+                var raw = await _prayerTimesService.GetTodayByCoordsAsync(
+                    latitude.Value, longitude.Value, method, school, tz, ct);
+
+                if (raw == null)
                 {
-                    City = city,
-                    Country = countryFinal,
-                    Date = DateTime.UtcNow.Date.ToString("yyyy-MM-dd"),
-                    Timezone = tz,
-                    Prayers = timings,
-                    NextPrayerName = nextName,
-                    NextPrayerTime = nextTime,
-                    NextFajrTime = nextFajr
-                };
-
-                return Ok(payload);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { error = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { error = "Errore interno server", details = ex.Message });
-            }
-        }
-
-        // ---------- WEEK / INTERVAL ----------
-        [Authorize]
-        [HttpGet("week")]
-        public async Task<IActionResult> GetWeek(
-            [FromQuery] int method = 3,               // default MWL
-            [FromQuery] int school = 0,               // default Standard
-            [FromQuery] string? start = null,         // yyyy-MM-dd
-            [FromQuery] int offset = 0,               // giorni da oggi
-            [FromQuery] int days = 7,                 // quanti giorni (1..14)
-            [FromQuery] string? cityOverride = null,
-            [FromQuery] string? country = null)
-        {
-            try
-            {
-                var (city, countryFinal) = ResolvePlace(User, cityOverride, country);
-
-                // calcolo start date
-                DateTime startDateUtc;
-                if (!string.IsNullOrWhiteSpace(start) && DateTime.TryParse(start, out var parsed))
-                    startDateUtc = parsed.Date;
-                else
-                    startDateUtc = DateTime.UtcNow.Date.AddDays(offset);
-
-                days = Math.Clamp(days, 1, 14);
-
-                // Aladhan calendar è mensile: dobbiamo chiamare i mesi necessari
-                var monthsToFetch = new HashSet<(int y, int m)>();
-                var cursor = startDateUtc;
-                for (int i = 0; i < days; i++)
-                {
-                    monthsToFetch.Add((cursor.Year, cursor.Month));
-                    cursor = cursor.AddDays(1);
+                    return Problem(
+                        statusCode: 502,
+                        title: "Service unavailable",
+                        detail: "AlAdhan API is temporarily unavailable.");
                 }
 
-                // Scarico e indicizzo per giorno
-                var monthCache = new Dictionary<(int y, int m), JArray>();
-                foreach (var (y, m) in monthsToFetch)
-                {
-                    var url =
-                        $"https://api.aladhan.com/v1/calendarByCity/{y}/{m:00}" +
-                        $"?city={Uri.EscapeDataString(city)}&country={Uri.EscapeDataString(countryFinal)}" +
-                        $"&method={method}&school={school}";
-                    var json = JObject.Parse(await _http.GetStringAsync(url));
-                    monthCache[(y, m)] = (JArray?)json["data"] ?? new JArray();
-                }
-
-                // build risposta
-                var daysOut = new List<PrayerDayDto>(days);
-                var it = startDateUtc;
-                for (int i = 0; i < days; i++, it = it.AddDays(1))
-                {
-                    var arr = monthCache[(it.Year, it.Month)];
-                    var idx = it.Day - 1;
-                    if (idx < 0 || idx >= arr.Count) continue;
-
-                    var d = arr[idx];
-                    var timings = d["timings"]!;
-                    var hijri = d["date"]?["hijri"]?["date"]?.ToString() ?? "";
-                    var greg = d["date"]?["gregorian"]?["date"]?.ToString() ?? "";
-                    var tz = d["meta"]?["timezone"]?.ToString() ??
-                             d["meta"]?["timezoneName"]?.ToString() ?? "UTC";
-
-                    daysOut.Add(new PrayerDayDto
-                    {
-                        Gregorian = greg,
-                        Hijri = hijri,
-                        WeekdayEn = d["date"]?["gregorian"]?["weekday"]?["en"]?.ToString(),
-                        WeekdayAr = d["date"]?["hijri"]?["weekday"]?["ar"]?.ToString(),
-                        Prayers = MapTimings(timings),
-                        Timezone = tz
-                    });
-                }
-
-                var resp = new PrayerWeekResponse
-                {
-                    City = city,
-                    Country = countryFinal,
-                    Method = method,
-                    School = school,
-                    RangeStart = startDateUtc.ToString("yyyy-MM-dd"),
-                    RangeEnd = startDateUtc.AddDays(days - 1).ToString("yyyy-MM-dd"),
-                    Days = daysOut
-                };
+                var resp = new PrayerTimesResponse(
+                    Source: "coords",
+                    Location: new LocationDto(
+                        resolvedCity ?? string.Empty,
+                        resolvedCountry ?? string.Empty,
+                        tz), // Already normalized by country
+                    Coords: new CoordsDto(
+                        Math.Round(latitude.Value, 4),
+                        Math.Round(longitude.Value, 4),
+                        "p4"),
+                    Method: method,
+                    School: school,
+                    Date: raw.Date,
+                    Prayers: new PrayersDto(
+                        raw.Prayers.Fajr,
+                        raw.Prayers.Sunrise,
+                        raw.Prayers.Dhuhr,
+                        raw.Prayers.Asr,
+                        raw.Prayers.Maghrib,
+                        raw.Prayers.Isha,
+                        raw.Prayers.Imsak,
+                        raw.Prayers.Midnight),
+                    NextPrayerName: raw.NextPrayerName,
+                    NextPrayerTime: raw.NextPrayerTime,
+                    NextFajrTime: raw.NextFajrTime);
 
                 return Ok(resp);
             }
-            catch (ArgumentException ex)
+
+            // 2) Fallback: city/country dai query param
+            if (!string.IsNullOrWhiteSpace(city) && !string.IsNullOrWhiteSpace(country))
             {
-                return BadRequest(new { error = ex.Message });
+                _logger.LogInformation("Using city/country from query: {City}, {Country}", city, country);
+
+                var raw = await _prayerTimesService.GetTodayByCityAsync(
+                    city!, country!, method, school, null, ct);
+
+                if (raw == null)
+                {
+                    return Problem(
+                        statusCode: 502,
+                        title: "Service unavailable",
+                        detail: "AlAdhan API is temporarily unavailable.");
+                }
+
+                var resp = new PrayerTimesResponse(
+                    Source: "fallback_city_country",
+                    Location: new LocationDto(city, country, TzHelper.ToIana(raw.Timezone)),
+                    Coords: new CoordsDto(null, null, null),
+                    Method: method,
+                    School: school,
+                    Date: raw.Date,
+                    Prayers: new PrayersDto(
+                        raw.Prayers.Fajr,
+                        raw.Prayers.Sunrise,
+                        raw.Prayers.Dhuhr,
+                        raw.Prayers.Asr,
+                        raw.Prayers.Maghrib,
+                        raw.Prayers.Isha,
+                        raw.Prayers.Imsak,
+                        raw.Prayers.Midnight),
+                    NextPrayerName: raw.NextPrayerName,
+                    NextPrayerTime: raw.NextPrayerTime,
+                    NextFajrTime: raw.NextFajrTime);
+
+                return Ok(resp);
             }
-            catch (Exception ex)
+
+            // 3) Ultimo fallback: claims profilo (SOLO se proprio serve)
+            var claimCity = User.FindFirst("city")?.Value;
+            var claimCountry = User.FindFirst("country")?.Value;
+            if (!string.IsNullOrWhiteSpace(claimCity) && !string.IsNullOrWhiteSpace(claimCountry))
             {
-                return StatusCode(500, new { error = "Errore interno server", details = ex.Message });
+                _logger.LogInformation("Using city/country from profile: {City}, {Country}", claimCity, claimCountry);
+
+                var raw = await _prayerTimesService.GetTodayByCityAsync(
+                    claimCity!, claimCountry!, method, school, null, ct);
+
+                if (raw == null)
+                {
+                    return Problem(
+                        statusCode: 502,
+                        title: "Service unavailable",
+                        detail: "AlAdhan API is temporarily unavailable.");
+                }
+
+                var resp = new PrayerTimesResponse(
+                    Source: "fallback_profile",
+                    Location: new LocationDto(claimCity, claimCountry, TzHelper.ToIana(raw.Timezone)),
+                    Coords: new CoordsDto(null, null, null),
+                    Method: method,
+                    School: school,
+                    Date: raw.Date,
+                    Prayers: new PrayersDto(
+                        raw.Prayers.Fajr,
+                        raw.Prayers.Sunrise,
+                        raw.Prayers.Dhuhr,
+                        raw.Prayers.Asr,
+                        raw.Prayers.Maghrib,
+                        raw.Prayers.Isha,
+                        raw.Prayers.Imsak,
+                        raw.Prayers.Midnight),
+                    NextPrayerName: raw.NextPrayerName,
+                    NextPrayerTime: raw.NextPrayerTime,
+                    NextFajrTime: raw.NextFajrTime);
+
+                return Ok(resp);
             }
+
+            return Problem(
+                statusCode: 400,
+                title: "Invalid parameters",
+                detail: "Provide (latitude, longitude) or (city, country). GPS is the primary source.");
+        }
+
+        // ---------- WEEK / INTERVAL ----------
+        /// <summary>
+        /// Gets prayer times for a date range (GPS first)
+        /// Priority: GPS coordinates → city/country query → profile claims
+        /// </summary>
+        /// <remarks>
+        /// **Priority order:** Same as Today endpoint
+        /// 
+        /// **Examples:**
+        /// - By GPS: `/api/PrayerTimes/week?latitude=45.5416&longitude=10.2118&days=7`
+        /// - By city: `/api/PrayerTimes/week?city=Brescia&country=Italy&days=14`
+        /// - Custom start: `/api/PrayerTimes/week?start=2024-01-01&days=7`
+        /// </remarks>
+        /// <param name="latitude">Latitude (-90 to 90). Takes highest priority.</param>
+        /// <param name="longitude">Longitude (-180 to 180). Takes highest priority.</param>
+        /// <param name="city">City name (fallback if coordinates not provided).</param>
+        /// <param name="country">Country name (fallback if coordinates not provided).</param>
+        /// <param name="method">Calculation method (default: 3 = MWL)</param>
+        /// <param name="school">School of thought (default: 0 = Standard)</param>
+        /// <param name="start">Start date in yyyy-MM-dd format (optional)</param>
+        /// <param name="offset">Days offset from today (default: 0). Ignored if start is provided.</param>
+        /// <param name="days">Number of days to fetch (1-14, default: 7)</param>
+        /// <returns>Prayer times for the requested date range</returns>
+        /// <response code="200">Returns prayer times successfully</response>
+        /// <response code="400">Invalid parameters</response>
+        /// <response code="502">AlAdhan API unavailable</response>
+        [Authorize]
+        [HttpGet("week")]
+        [ProducesResponseType(typeof(PrayerWeekResponseV2), 200)]
+        [ProducesResponseType(typeof(ProblemDetails), 400)]
+        [ProducesResponseType(typeof(ProblemDetails), 502)]
+        public async Task<IActionResult> Week(
+            [FromQuery] double? latitude,
+            [FromQuery] double? longitude,
+            [FromQuery] string? city,
+            [FromQuery] string? country,
+            [FromQuery] int method = 3,
+            [FromQuery] int school = 0,
+            [FromQuery] string? start = null,
+            [FromQuery] int offset = 0,
+            [FromQuery] int days = 7,
+            CancellationToken ct = default)
+        {
+            // Validate days
+            if (days < 1 || days > 14)
+            {
+                return Problem(
+                    statusCode: 400,
+                    title: "Invalid days parameter",
+                    detail: "Days must be between 1 and 14.");
+            }
+
+            // Calculate start date
+            DateTime? startDate = null;
+            if (!string.IsNullOrWhiteSpace(start) && DateTime.TryParse(start, out var parsed))
+                startDate = parsed.Date;
+            else if (offset != 0)
+                startDate = DateTime.UtcNow.Date.AddDays(offset);
+
+            // 1) GPS first - sempre calcolo da coords + reverse geocoding server-side
+            if (latitude is >= -90 and <= 90 && longitude is >= -180 and <= 180)
+            {
+                _logger.LogInformation("Using GPS coordinates: lat={Latitude}, lng={Longitude}", latitude, longitude);
+
+                // Reverse geocoding obbligatorio server-side per city/country/timezone
+                GeocodingResult? place = null;
+                try
+                {
+                    place = await _geolocationService.ReverseGeocodeAsync(
+                        (decimal)latitude.Value, (decimal)longitude.Value, ct);
+                    
+                    if (place != null)
+                    {
+                        _logger.LogInformation("Reverse geocoding successful: lat={Lat}, lng={Lng} → city={City}, country={Country}",
+                            latitude, longitude, place.City, place.Country);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Reverse geocoding returned null for lat={Lat}, lng={Lng}", latitude, longitude);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Reverse geocoding exception for {Lat},{Lng}", latitude, longitude);
+                }
+
+                // Se reverse fallisce o restituisce dati incompleti, prova city/country dai query params (se presenti)
+                string? resolvedCity = place?.City;
+                string? resolvedCountry = place?.Country;
+                
+                if (string.IsNullOrWhiteSpace(resolvedCity) || string.IsNullOrWhiteSpace(resolvedCountry))
+                {
+                    if (!string.IsNullOrWhiteSpace(city) && !string.IsNullOrWhiteSpace(country))
+                    {
+                        _logger.LogInformation("Using city/country from query params as fallback after reverse geocoding failure/incomplete data");
+                        resolvedCity = city;
+                        resolvedCountry = country;
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Reverse geocoding failed/incomplete and no city/country in query params. Location fields will be empty, but prayer times are correct (calculated from coords).");
+                    }
+                }
+
+                // Normalize timezone based on country (Italy → Europe/Rome, not Europe/Berlin)
+                var tz = TzHelper.NormalizeTimezoneByCountry(place?.TimeZoneId, resolvedCountry ?? place?.Country);
+                
+                var raw = await _prayerTimesService.GetWeekByCoordsAsync(
+                    latitude.Value, longitude.Value, method, school, startDate, days, tz, ct);
+
+                if (raw == null)
+                {
+                    return Problem(
+                        statusCode: 502,
+                        title: "Service unavailable",
+                        detail: "AlAdhan API is temporarily unavailable.");
+                }
+
+                var resp = new PrayerWeekResponseV2(
+                    Source: "coords",
+                    Location: new LocationDto(
+                        resolvedCity ?? string.Empty,
+                        resolvedCountry ?? string.Empty,
+                        tz), // Already normalized by country
+                    Coords: new CoordsDto(
+                        Math.Round(latitude.Value, 4),
+                        Math.Round(longitude.Value, 4),
+                        "p4"),
+                    Method: method,
+                    School: school,
+                    RangeStart: raw.RangeStart,
+                    RangeEnd: raw.RangeEnd,
+                    Days: raw.Days);
+
+                return Ok(resp);
+            }
+
+            // 2) Fallback: city/country dai query param
+            if (!string.IsNullOrWhiteSpace(city) && !string.IsNullOrWhiteSpace(country))
+            {
+                _logger.LogInformation("Using city/country from query: {City}, {Country}", city, country);
+
+                var raw = await _prayerTimesService.GetWeekByCityAsync(
+                    city!, country!, method, school, startDate, days, null, ct);
+
+                if (raw == null)
+                {
+                    return Problem(
+                        statusCode: 502,
+                        title: "Service unavailable",
+                        detail: "AlAdhan API is temporarily unavailable.");
+                }
+
+                var resp = new PrayerWeekResponseV2(
+                    Source: "fallback_city_country",
+                    Location: new LocationDto(
+                        city,
+                        country,
+                        TzHelper.ToIana(raw.Days.FirstOrDefault()?.Timezone)),
+                    Coords: new CoordsDto(null, null, null),
+                    Method: method,
+                    School: school,
+                    RangeStart: raw.RangeStart,
+                    RangeEnd: raw.RangeEnd,
+                    Days: raw.Days);
+
+                return Ok(resp);
+            }
+
+            // 3) Ultimo fallback: claims profilo
+            var claimCity = User.FindFirst("city")?.Value;
+            var claimCountry = User.FindFirst("country")?.Value;
+            if (!string.IsNullOrWhiteSpace(claimCity) && !string.IsNullOrWhiteSpace(claimCountry))
+            {
+                _logger.LogInformation("Using city/country from profile: {City}, {Country}", claimCity, claimCountry);
+
+                var raw = await _prayerTimesService.GetWeekByCityAsync(
+                    claimCity!, claimCountry!, method, school, startDate, days, null, ct);
+
+                if (raw == null)
+                {
+                    return Problem(
+                        statusCode: 502,
+                        title: "Service unavailable",
+                        detail: "AlAdhan API is temporarily unavailable.");
+                }
+
+                var resp = new PrayerWeekResponseV2(
+                    Source: "fallback_profile",
+                    Location: new LocationDto(
+                        claimCity,
+                        claimCountry,
+                        TzHelper.ToIana(raw.Days.FirstOrDefault()?.Timezone)),
+                    Coords: new CoordsDto(null, null, null),
+                    Method: method,
+                    School: school,
+                    RangeStart: raw.RangeStart,
+                    RangeEnd: raw.RangeEnd,
+                    Days: raw.Days);
+
+                return Ok(resp);
+            }
+
+            return Problem(
+                statusCode: 400,
+                title: "Invalid parameters",
+                detail: "Provide (latitude, longitude) or (city, country). GPS is the primary source.");
         }
     }
 }
