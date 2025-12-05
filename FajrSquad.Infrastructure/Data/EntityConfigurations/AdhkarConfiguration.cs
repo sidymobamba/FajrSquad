@@ -65,3 +65,4 @@ namespace FajrSquad.Infrastructure.Data.EntityConfigurations
 }
 
 
+

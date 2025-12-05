@@ -35,3 +35,4 @@ namespace FajrSquad.Infrastructure.Services.PrayerTimes
     }
 }
 
+
